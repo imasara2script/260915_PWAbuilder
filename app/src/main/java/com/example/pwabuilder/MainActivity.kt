@@ -118,11 +118,22 @@ class MainActivity : ComponentActivity() {
                 val listDetailStrategy = rememberListDetailSceneStrategy<NavKey>(directive = directive)
 
                 CompositionLocalProvider(LocalPwaViewModel provides viewModel) {
+                    val context = LocalContext.current
                     LaunchedEffect(Unit) {
                         viewModel.navigationEvents.collect { destination ->
                             if (backStack.last() != destination) {
                                 backStack.add(destination)
                             }
+                        }
+                    }
+                    LaunchedEffect(Unit) {
+                        viewModel.successEvents.collect {
+                            Toast.makeText(context, "Operation Successful", Toast.LENGTH_SHORT).show()
+                        }
+                    }
+                    LaunchedEffect(Unit) {
+                        viewModel.errorEvents.collect { error ->
+                            Toast.makeText(context, error, Toast.LENGTH_LONG).show()
                         }
                     }
                     NavDisplay(
@@ -203,6 +214,24 @@ class MainActivity : ComponentActivity() {
         val projectId = intent.getStringExtra("projectId")
         if (projectId != null) {
             viewModel.navigateTo(PwaDestinations.PwaPreview(projectId))
+        }
+
+        if (type == "application/json" && Intent.ACTION_SEND == action) {
+            val uri = intent.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)
+            if (uri != null) {
+                try {
+                    val jsonString = contentResolver.openInputStream(uri)?.use { 
+                        it.bufferedReader().readText() 
+                    }
+                    if (jsonString != null) {
+                        viewModel.importProjectFromJson(jsonString)
+                        Toast.makeText(this, "Importing PWA project...", Toast.LENGTH_SHORT).show()
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    Toast.makeText(this, "Failed to read project file", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
 
         if (type?.startsWith("image/") == true) {

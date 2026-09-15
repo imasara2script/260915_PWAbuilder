@@ -246,6 +246,36 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         }
     }
 
+    fun importProjectFromJson(jsonString: String) {
+        try {
+            val json = JSONObject(jsonString)
+            val name = json.optString("projectName", "Imported Project")
+            val filesArray = json.getJSONArray("files")
+            val files = mutableListOf<PwaFile>()
+            for (i in 0 until filesArray.length()) {
+                val fileJson = filesArray.getJSONObject(i)
+                files.add(PwaFile(fileJson.getString("name"), fileJson.getString("content")))
+            }
+
+            val project = PwaProject(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                files = files,
+                chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Imported Project", emptyList()))
+            )
+            storage.saveProject(project)
+            loadProjects()
+            viewModelScope.launch {
+                _successEvents.emit(Unit)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            viewModelScope.launch {
+                _errorEvents.emit("Failed to import project: ${e.message}")
+            }
+        }
+    }
+
     fun addSharedImageToProject(projectId: String, imagePath: String, fileName: String) {
         val project = _projects.value.find { it.id == projectId } ?: return
         val imageFile = File(imagePath)
