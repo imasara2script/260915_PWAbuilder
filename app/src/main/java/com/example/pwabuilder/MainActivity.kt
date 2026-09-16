@@ -378,6 +378,7 @@ fun ProjectSettingsScreen(
 ) {
     val viewModel = LocalPwaViewModel.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
+    var projectName by remember(project) { mutableStateOf(project.name) }
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -423,10 +424,31 @@ fun ProjectSettingsScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            Text(text = project.name, style = MaterialTheme.typography.headlineMedium)
+            OutlinedTextField(
+                value = projectName,
+                onValueChange = { projectName = it },
+                label = { Text("Project Name") },
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            Spacer(modifier = Modifier.height(16.dp))
+            
+            Button(
+                onClick = { viewModel.renameProject(project.id, projectName) },
+                enabled = projectName.isNotBlank() && projectName != project.name,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Name")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text(text = "Stats", style = MaterialTheme.typography.titleMedium)
             Text(text = "${project.files.size} files", style = MaterialTheme.typography.bodyMedium)
             
-            Spacer(modifier = Modifier.height(24.dp))
+            Spacer(modifier = Modifier.weight(1f))
             
             Button(
                 onClick = { showDeleteConfirm = true },

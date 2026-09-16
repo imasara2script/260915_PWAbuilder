@@ -94,6 +94,13 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
+    fun renameProject(projectId: String, newName: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedProject = project.copy(name = newName)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
     fun updateApiKey(key: String) {
         _apiKey.value = key
         storage.saveApiKey(key)
