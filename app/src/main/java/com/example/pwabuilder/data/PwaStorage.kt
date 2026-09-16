@@ -7,7 +7,11 @@ import org.json.JSONObject
 import java.io.File
 
 data class PwaFile(val name: String, val content: String)
-data class ChatMessage(val role: String, val content: String)
+data class ChatMessage(
+    val role: String, 
+    val content: String,
+    val snapshot: List<PwaFile>? = null
+)
 data class ChatSession(
     val id: String, 
     val title: String, 
@@ -92,6 +96,16 @@ class PwaStorage(private val context: Context) {
                     msgArray.put(JSONObject().apply {
                         put("role", msg.role)
                         put("content", msg.content)
+                        msg.snapshot?.let { snap ->
+                            val snapArray = JSONArray()
+                            snap.forEach { f ->
+                                snapArray.put(JSONObject().apply {
+                                    put("name", f.name)
+                                    put("content", f.content)
+                                })
+                            }
+                            put("snapshot", snapArray)
+                        }
                     })
                 }
                 put("messages", msgArray)
@@ -156,7 +170,21 @@ class PwaStorage(private val context: Context) {
                         val msgArray = sessionJson.getJSONArray("messages")
                         for (j in 0 until msgArray.length()) {
                             val msgJson = msgArray.getJSONObject(j)
-                            msgList.add(ChatMessage(msgJson.getString("role"), msgJson.getString("content")))
+                            val snapArray = msgJson.optJSONArray("snapshot")
+                            val snapList = if (snapArray != null) {
+                                val list = mutableListOf<PwaFile>()
+                                for (k in 0 until snapArray.length()) {
+                                    val fJson = snapArray.getJSONObject(k)
+                                    list.add(PwaFile(fJson.getString("name"), fJson.getString("content")))
+                                }
+                                list
+                            } else null
+                            
+                            msgList.add(ChatMessage(
+                                msgJson.getString("role"), 
+                                msgJson.getString("content"),
+                                snapList
+                            ))
                         }
                         chatSessions.add(ChatSession(
                             sessionJson.getString("id"),

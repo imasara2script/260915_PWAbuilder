@@ -405,7 +405,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                     id = UUID.randomUUID().toString(),
                     name = name,
                     files = filesParsed,
-                    chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt)), result.totalTokenCount)),
+                    chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt, filesParsed)), result.totalTokenCount)),
                     activeSessionId = null,
                     selectedModel = _selectedModel.value
                 )
@@ -499,6 +499,64 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         }
     }
 
+    fun resetToMessage(projectId: String, sessionId: String, messageIndex: Int, newInstruction: String) {
+        viewModelScope.launch {
+            val project = _projects.value.find { it.id == projectId } ?: return@launch
+            val session = project.chatSessions.find { it.id == sessionId } ?: return@launch
+            val modelToUse = session.selectedModel ?: project.selectedModel ?: _selectedModel.value
+            
+            _isGenerating.value = true
+            _lastError.value = null
+            
+            try {
+                val historyUntilThis = session.messages.take(messageIndex)
+                val baseFiles = if (messageIndex > 0) {
+                    session.messages[messageIndex - 1].snapshot ?: project.files
+                } else {
+                    emptyList<PwaFile>()
+                }
+
+                val result = if (baseFiles.isEmpty()) {
+                    geminiService.generatePwa(_apiKey.value, modelToUse, newInstruction)
+                } else {
+                    val tempProject = project.copy(files = baseFiles)
+                    geminiService.refinePwa(_apiKey.value, modelToUse, tempProject, historyUntilThis, newInstruction)
+                }
+                
+                val response = result.text
+                val filesParsed = geminiService.parsePwaResponse(response)
+                if (filesParsed.isEmpty()) {
+                     _errorEvents.emit("Could not parse response")
+                     return@launch
+                }
+
+                val newMessage = ChatMessage("user", newInstruction, filesParsed)
+                val updatedMessages = historyUntilThis + newMessage
+                
+                val updatedSession = session.copy(
+                    messages = updatedMessages, 
+                    lastTokenCount = result.totalTokenCount,
+                    title = if (messageIndex == 0) newInstruction.take(30) + "..." else session.title
+                )
+                
+                val updatedSessions = project.chatSessions.map { if (it.id == session.id) updatedSession else it }
+                val updatedProject = project.copy(
+                    files = filesParsed,
+                    chatSessions = updatedSessions,
+                    activeSessionId = session.id
+                )
+                storage.saveProject(updatedProject)
+                loadProjects()
+                _successEvents.emit(Unit)
+            } catch (e: Exception) {
+                e.printStackTrace()
+                _errorEvents.emit("Reset failed: ${e.message}")
+            } finally {
+                _isGenerating.value = false
+            }
+        }
+    }
+
     fun refinePwa(projectId: String, instruction: String, imagePaths: List<String> = emptyList()) {
         viewModelScope.launch {
             val project = _projects.value.find { it.id == projectId } ?: return@launch
@@ -522,7 +580,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                     return@launch
                 }
 
-                val newMessage = ChatMessage("user", instruction + if (imagePaths.isNotEmpty()) " [Attached ${imagePaths.size} images]" else "")
+                val newMessage = ChatMessage("user", instruction + if (imagePaths.isNotEmpty()) " [Attached ${imagePaths.size} images]" else "", filesParsed)
                 val updatedMessages = activeSession.messages + newMessage
                 val updatedTitle = if (activeSession.messages.isEmpty()) instruction.take(30) + "..." else activeSession.title
                 

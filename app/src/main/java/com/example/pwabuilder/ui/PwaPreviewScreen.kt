@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.layout.width
@@ -284,6 +285,16 @@ fun PwaPreviewScreen(
                             showChat = false
                         }
                     }
+                },
+                onReset = { index, instruction ->
+                    if (project.activeSession != null) {
+                        viewModel.resetToMessage(project.id, project.activeSession!!.id, index, instruction)
+                        scope.launch { sheetState.hide() }.invokeOnCompletion {
+                            if (!sheetState.isVisible) {
+                                showChat = false
+                            }
+                        }
+                    }
                 }
             )
         }
@@ -402,7 +413,8 @@ fun PwaPreviewScreen(
 @Composable
 fun ChatInterface(
     project: PwaProject,
-    onSend: (String, List<String>) -> Unit
+    onSend: (String, List<String>) -> Unit,
+    onReset: (Int, String) -> Unit
 ) {
     val context = LocalContext.current
     val viewModel = LocalPwaViewModel.current
@@ -612,25 +624,50 @@ fun ChatInterface(
             modifier = Modifier.weight(1f),
             reverseLayout = true
         ) {
-            items(messages.reversed()) { msg ->
+            itemsIndexed(messages.reversed()) { revIndex, msg ->
+                val index = messages.size - 1 - revIndex
+                var isEditing by remember { mutableStateOf(false) }
+                var editText by remember { mutableStateOf(msg.content) }
+                
                 Box(
                     modifier = Modifier.fillMaxWidth(),
                     contentAlignment = if (msg.role == "user") Alignment.CenterEnd else Alignment.CenterStart
                 ) {
-                    Card(
-                        modifier = Modifier.padding(vertical = 4.dp),
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (msg.role == "user") 
-                                MaterialTheme.colorScheme.primaryContainer 
-                            else 
-                                MaterialTheme.colorScheme.secondaryContainer
-                        )
-                    ) {
-                        Text(
-                            text = msg.content,
-                            modifier = Modifier.padding(8.dp),
-                            style = MaterialTheme.typography.bodyMedium
-                        )
+                    Column(horizontalAlignment = if (msg.role == "user") Alignment.End else Alignment.Start) {
+                        Card(
+                            modifier = Modifier.padding(vertical = 4.dp),
+                            onClick = { if (msg.role == "user") isEditing = !isEditing },
+                            colors = CardDefaults.cardColors(
+                                containerColor = if (msg.role == "user") 
+                                    MaterialTheme.colorScheme.primaryContainer 
+                                else 
+                                    MaterialTheme.colorScheme.secondaryContainer
+                            )
+                        ) {
+                            if (isEditing) {
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    OutlinedTextField(
+                                        value = editText,
+                                        onValueChange = { editText = it },
+                                        modifier = Modifier.fillMaxWidth(),
+                                        textStyle = MaterialTheme.typography.bodyMedium
+                                    )
+                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                                        TextButton(onClick = { isEditing = false }) { Text("Cancel") }
+                                        TextButton(onClick = { 
+                                            onReset(index, editText)
+                                            isEditing = false
+                                        }) { Text("Reset from here", color = MaterialTheme.colorScheme.error) }
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    text = msg.content,
+                                    modifier = Modifier.padding(8.dp),
+                                    style = MaterialTheme.typography.bodyMedium
+                                )
+                            }
+                        }
                     }
                 }
             }
