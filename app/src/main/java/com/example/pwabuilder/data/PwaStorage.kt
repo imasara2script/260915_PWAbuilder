@@ -20,7 +20,8 @@ data class PwaProject(
     val name: String,
     val files: List<PwaFile>,
     val chatSessions: List<ChatSession> = emptyList(),
-    val activeSessionId: String? = null
+    val activeSessionId: String? = null,
+    val selectedModel: String? = null
 ) {
     val activeSession: ChatSession?
         get() = chatSessions.find { it.id == activeSessionId } ?: chatSessions.lastOrNull()
@@ -73,6 +74,7 @@ class PwaStorage(private val context: Context) {
         val metadata = JSONObject().apply {
             put("name", project.name)
             put("activeSessionId", project.activeSessionId)
+            put("selectedModel", project.selectedModel)
         }
         File(projectDir, ".metadata").writeText(metadata.toString())
         
@@ -125,11 +127,13 @@ class PwaStorage(private val context: Context) {
         val metadataFile = File(projectDir, ".metadata")
         var name = "Untitled"
         var activeSessionId: String? = null
+        var selectedModel: String? = null
         if (metadataFile.exists()) {
             try {
                 val json = JSONObject(metadataFile.readText())
                 name = json.optString("name", "Untitled")
                 activeSessionId = json.optString("activeSessionId").takeIf { it.isNotEmpty() }
+                selectedModel = json.optString("selectedModel").takeIf { it.isNotEmpty() }
             } catch (e: Exception) {
                 // Fallback for old format
                 val text = metadataFile.readText()
@@ -183,7 +187,7 @@ class PwaStorage(private val context: Context) {
                 PwaFile(file.name, file.readText())
             }
         } ?: emptyList()
-        return PwaProject(id, name, files, chatSessions, activeSessionId)
+        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel)
     }
 
     private fun isImageFile(name: String): Boolean {

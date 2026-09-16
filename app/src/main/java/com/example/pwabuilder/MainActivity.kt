@@ -54,7 +54,6 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -379,6 +378,13 @@ fun ProjectSettingsScreen(
     val viewModel = LocalPwaViewModel.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var projectName by remember(project) { mutableStateOf(project.name) }
+    
+    val availableModels by viewModel.availableModels.collectAsState()
+    val globalSelectedModel by viewModel.selectedModel.collectAsState()
+    val isFetchingModels by viewModel.isFetchingModels.collectAsState()
+    
+    var expandedModelDropdown by remember { mutableStateOf(false) }
+    val currentProjectModel = project.selectedModel ?: globalSelectedModel
 
     if (showDeleteConfirm) {
         AlertDialog(
@@ -431,7 +437,7 @@ fun ProjectSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             )
             
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             
             Button(
                 onClick = { viewModel.renameProject(project.id, projectName) },
@@ -439,6 +445,46 @@ fun ProjectSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save Name")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Text("AI Configuration", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Box(modifier = Modifier.fillMaxWidth()) {
+                OutlinedTextField(
+                    value = if (isFetchingModels) "Fetching models..." else currentProjectModel,
+                    onValueChange = { },
+                    readOnly = true,
+                    label = { Text("AI Model for this Project") },
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (isFetchingModels) {
+                            CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        } else {
+                            Button(onClick = { expandedModelDropdown = true }) {
+                                Text("Change")
+                            }
+                        }
+                    }
+                )
+                DropdownMenu(
+                    expanded = expandedModelDropdown,
+                    onDismissRequest = { expandedModelDropdown = false }
+                ) {
+                    availableModels.forEach { model ->
+                        DropdownMenuItem(
+                            text = { Text(model) },
+                            onClick = {
+                                viewModel.setProjectModel(project.id, model)
+                                expandedModelDropdown = false
+                            }
+                        )
+                    }
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -550,7 +596,7 @@ fun SettingsScreen(
         modifier = modifier.fillMaxSize(),
         topBar = {
             TopAppBar(
-                title = { Text("Settings") },
+                title = { Text("Global Settings") },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -587,7 +633,7 @@ fun SettingsScreen(
             )
 
             Spacer(modifier = Modifier.height(24.dp))
-            Text("Model Configuration", style = MaterialTheme.typography.titleMedium)
+            Text("Default Configuration", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 
             Box(modifier = Modifier.fillMaxWidth()) {
@@ -595,7 +641,7 @@ fun SettingsScreen(
                     value = if (isFetchingModels) "Fetching models..." else selectedModel,
                     onValueChange = { },
                     readOnly = true,
-                    label = { Text("Gemini Model") },
+                    label = { Text("Default Gemini Model") },
                     modifier = Modifier.fillMaxWidth(),
                     trailingIcon = {
                         if (isFetchingModels) {

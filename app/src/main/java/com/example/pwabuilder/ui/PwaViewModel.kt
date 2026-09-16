@@ -101,6 +101,13 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
+    fun setProjectModel(projectId: String, model: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedProject = project.copy(selectedModel = model)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
     fun updateApiKey(key: String) {
         _apiKey.value = key
         storage.saveApiKey(key)
@@ -389,7 +396,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                     name = name,
                     files = filesParsed,
                     chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt)), result.totalTokenCount)),
-                    activeSessionId = null
+                    activeSessionId = null,
+                    selectedModel = _selectedModel.value
                 )
                 storage.saveProject(project)
                 loadProjects()
@@ -425,12 +433,13 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         viewModelScope.launch {
             val project = _projects.value.find { it.id == projectId } ?: return@launch
             val activeSession = project.activeSession ?: ChatSession(UUID.randomUUID().toString(), "New Conversation", emptyList())
-            
+            val modelToUse = project.selectedModel ?: _selectedModel.value
+
             _isGenerating.value = true
             _lastError.value = null
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
-                val result = geminiService.refinePwa(_apiKey.value, _selectedModel.value, project, activeSession.messages, instruction, files)
+                val result = geminiService.refinePwa(_apiKey.value, modelToUse, project, activeSession.messages, instruction, files)
                 val response = result.text
                 if (response.isBlank()) {
                     _errorEvents.emit("Empty response from AI")
@@ -471,7 +480,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         }
     }
 
-    fun getTokenLimit(): Int {
-        return if (_selectedModel.value.contains("pro", ignoreCase = true)) 2097152 else 1048576
+    fun getTokenLimit(model: String? = null): Int {
+        val modelName = model ?: _selectedModel.value
+        return if (modelName.contains("pro", ignoreCase = true)) 2097152 else 1048576
     }
 }

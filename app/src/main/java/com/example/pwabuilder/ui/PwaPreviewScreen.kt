@@ -454,7 +454,7 @@ fun ChatInterface(
         }
         
         if (activeSession != null && activeSession.lastTokenCount > 0) {
-            val limit = viewModel.getTokenLimit()
+            val limit = viewModel.getTokenLimit(project.selectedModel)
             val usage = activeSession.lastTokenCount.toFloat() / limit
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
