@@ -49,6 +49,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -159,7 +160,20 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOpenSettings = {
                                         backStack.add(PwaDestinations.Settings)
+                                    },
+                                    onImportProject = {
+                                        backStack.add(PwaDestinations.ImportProject)
                                     }
+                                )
+                            }
+                            entry<PwaDestinations.ImportProject>(
+                                metadata = ListDetailSceneStrategy.detailPane()
+                            ) {
+                                ImportProjectScreen(
+                                    onProjectImported = {
+                                        backStack.removeLastOrNull()
+                                    },
+                                    onBack = { backStack.removeLastOrNull() }
                                 )
                             }
                             entry<PwaDestinations.Settings>(
@@ -284,6 +298,7 @@ fun ProjectDashboardScreen(
     onPreviewProject: (PwaProject) -> Unit,
     onAddProject: () -> Unit,
     onOpenSettings: () -> Unit,
+    onImportProject: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val viewModel = LocalPwaViewModel.current
@@ -295,6 +310,9 @@ fun ProjectDashboardScreen(
             TopAppBar(
                 title = { Text("PWA Projects") },
                 actions = {
+                    IconButton(onClick = onImportProject) {
+                        Icon(Icons.Default.UploadFile, contentDescription = "Import Project")
+                    }
                     IconButton(onClick = onOpenSettings) {
                         Icon(Icons.Default.Settings, contentDescription = "Settings")
                     }
@@ -317,6 +335,74 @@ fun ProjectDashboardScreen(
             items(projects) { project ->
                 ProjectItem(project = project, onPreviewClick = { onPreviewProject(project) })
                 HorizontalDivider()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ImportProjectScreen(
+    onProjectImported: () -> Unit,
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val viewModel = LocalPwaViewModel.current
+    var jsonText by remember { mutableStateOf("") }
+    val context = LocalContext.current
+
+    LaunchedEffect(Unit) {
+        viewModel.successEvents.collect {
+            onProjectImported()
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("Import Project") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = "Paste the project JSON text below to import it.",
+                style = MaterialTheme.typography.bodyMedium,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedTextField(
+                value = jsonText,
+                onValueChange = { jsonText = it },
+                label = { Text("Project JSON") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f),
+                placeholder = { Text("{ \"projectName\": \"...\", \"files\": [...] }") }
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+            Button(
+                onClick = {
+                    if (jsonText.isNotBlank()) {
+                        viewModel.importProjectFromJson(jsonText)
+                    }
+                },
+                enabled = jsonText.isNotBlank(),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Import Project")
             }
         }
     }
@@ -551,7 +637,7 @@ fun AiEditorScreen(
 @Composable
 fun ProjectDashboardPreview() {
     PWABuilderTheme {
-        ProjectDashboardScreen(onPreviewProject = {}, onAddProject = {}, onOpenSettings = {})
+        ProjectDashboardScreen(onPreviewProject = {}, onAddProject = {}, onOpenSettings = {}, onImportProject = {})
     }
 }
 
