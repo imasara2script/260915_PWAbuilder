@@ -53,6 +53,7 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.rememberModalBottomSheetState
@@ -407,8 +408,13 @@ fun ChatInterface(
     var text by remember { mutableStateOf("") }
     var selectedImagePaths by remember { mutableStateOf<List<String>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
+    
+    val availableModels by viewModel.availableModels.collectAsState()
+    val globalSelectedModel by viewModel.selectedModel.collectAsState()
+    var expandedModelDropdown by remember { mutableStateOf(false) }
 
     val activeSession = project.activeSession
+    val currentSessionModel = activeSession?.selectedModel ?: project.selectedModel ?: globalSelectedModel
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
@@ -439,11 +445,41 @@ fun ChatInterface(
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(modifier = Modifier.weight(1f)) {
                 Text("Refine PWA", style = MaterialTheme.typography.titleLarge)
-                Text(
-                    text = activeSession?.title ?: "New Conversation",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.secondary
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = activeSession?.title ?: "New Conversation",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    
+                    if (activeSession != null) {
+                        Box {
+                            TextButton(
+                                onClick = { expandedModelDropdown = true }
+                            ) {
+                                Text(
+                                    text = currentSessionModel,
+                                    style = MaterialTheme.typography.labelSmall
+                                )
+                            }
+                            DropdownMenu(
+                                expanded = expandedModelDropdown,
+                                onDismissRequest = { expandedModelDropdown = false }
+                            ) {
+                                availableModels.forEach { model ->
+                                    DropdownMenuItem(
+                                        text = { Text(model) },
+                                        onClick = {
+                                            viewModel.setSessionModel(project.id, activeSession.id, model)
+                                            expandedModelDropdown = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
             }
             IconButton(onClick = { viewModel.createNewSession(project.id) }) {
                 Icon(Icons.Rounded.Add, contentDescription = "New Chat")
@@ -454,7 +490,7 @@ fun ChatInterface(
         }
         
         if (activeSession != null && activeSession.lastTokenCount > 0) {
-            val limit = viewModel.getTokenLimit(project.selectedModel)
+            val limit = viewModel.getTokenLimit(currentSessionModel)
             val usage = activeSession.lastTokenCount.toFloat() / limit
             Column(modifier = Modifier.padding(vertical = 4.dp)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

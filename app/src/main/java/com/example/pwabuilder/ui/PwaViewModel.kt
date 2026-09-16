@@ -108,6 +108,16 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
+    fun setSessionModel(projectId: String, sessionId: String, model: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedSessions = project.chatSessions.map {
+            if (it.id == sessionId) it.copy(selectedModel = model) else it
+        }
+        val updatedProject = project.copy(chatSessions = updatedSessions)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
     fun updateApiKey(key: String) {
         _apiKey.value = key
         storage.saveApiKey(key)
@@ -433,7 +443,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         viewModelScope.launch {
             val project = _projects.value.find { it.id == projectId } ?: return@launch
             val activeSession = project.activeSession ?: ChatSession(UUID.randomUUID().toString(), "New Conversation", emptyList())
-            val modelToUse = project.selectedModel ?: _selectedModel.value
+            val modelToUse = activeSession.selectedModel ?: project.selectedModel ?: _selectedModel.value
 
             _isGenerating.value = true
             _lastError.value = null

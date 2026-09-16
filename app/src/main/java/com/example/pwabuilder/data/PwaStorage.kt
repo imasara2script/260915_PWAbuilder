@@ -12,7 +12,8 @@ data class ChatSession(
     val id: String, 
     val title: String, 
     val messages: List<ChatMessage>,
-    val lastTokenCount: Int = 0
+    val lastTokenCount: Int = 0,
+    val selectedModel: String? = null
 )
 
 data class PwaProject(
@@ -85,6 +86,7 @@ class PwaStorage(private val context: Context) {
                 put("id", session.id)
                 put("title", session.title)
                 put("lastTokenCount", session.lastTokenCount)
+                put("selectedModel", session.selectedModel)
                 val msgArray = JSONArray()
                 session.messages.forEach { msg ->
                     msgArray.put(JSONObject().apply {
@@ -160,7 +162,8 @@ class PwaStorage(private val context: Context) {
                             sessionJson.getString("id"),
                             sessionJson.getString("title"),
                             msgList,
-                            sessionJson.optInt("lastTokenCount", 0)
+                            sessionJson.optInt("lastTokenCount", 0),
+                            sessionJson.optString("selectedModel").takeIf { it.isNotEmpty() }
                         ))
                     }
                 } else {
