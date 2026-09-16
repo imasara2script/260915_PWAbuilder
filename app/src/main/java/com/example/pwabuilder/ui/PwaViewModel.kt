@@ -439,6 +439,66 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
+    fun deleteSession(projectId: String, sessionId: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedSessions = project.chatSessions.filter { it.id != sessionId }
+        val updatedProject = project.copy(
+            chatSessions = updatedSessions,
+            activeSessionId = if (project.activeSessionId == sessionId) null else project.activeSessionId
+        )
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
+    fun getSessionJson(session: ChatSession): String {
+        val json = JSONObject().apply {
+            put("sessionId", session.id)
+            put("title", session.title)
+            put("selectedModel", session.selectedModel)
+            val msgArray = JSONArray()
+            session.messages.forEach { msg ->
+                msgArray.put(JSONObject().apply {
+                    put("role", msg.role)
+                    put("content", msg.content)
+                })
+            }
+            put("messages", msgArray)
+        }
+        return json.toString(2)
+    }
+
+    fun importSession(projectId: String, jsonString: String) {
+        try {
+            val json = JSONObject(jsonString)
+            val project = _projects.value.find { it.id == projectId } ?: return
+            
+            val msgArray = json.getJSONArray("messages")
+            val messages = mutableListOf<ChatMessage>()
+            for (i in 0 until msgArray.length()) {
+                val msgJson = msgArray.getJSONObject(i)
+                messages.add(ChatMessage(msgJson.getString("role"), msgJson.getString("content")))
+            }
+
+            val newSession = ChatSession(
+                id = UUID.randomUUID().toString(),
+                title = json.optString("title", "Imported Chat"),
+                messages = messages,
+                selectedModel = json.optString("selectedModel").takeIf { it.isNotEmpty() }
+            )
+
+            val updatedProject = project.copy(
+                chatSessions = project.chatSessions + newSession,
+                activeSessionId = newSession.id
+            )
+            storage.saveProject(updatedProject)
+            loadProjects()
+            viewModelScope.launch { _successEvents.emit(Unit) }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            viewModelScope.launch { _errorEvents.emit("Failed to import chat: ${e.message}") }
+        }
+    }
+
     fun refinePwa(projectId: String, instruction: String, imagePaths: List<String> = emptyList()) {
         viewModelScope.launch {
             val project = _projects.value.find { it.id == projectId } ?: return@launch

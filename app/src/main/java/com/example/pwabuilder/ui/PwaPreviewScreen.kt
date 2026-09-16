@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.rounded.Send
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.rounded.Add
@@ -408,6 +409,7 @@ fun ChatInterface(
     var text by remember { mutableStateOf("") }
     var selectedImagePaths by remember { mutableStateOf<List<String>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
+    var showImportChat by remember { mutableStateOf(false) }
     
     val availableModels by viewModel.availableModels.collectAsState()
     val globalSelectedModel by viewModel.selectedModel.collectAsState()
@@ -415,6 +417,8 @@ fun ChatInterface(
 
     val activeSession = project.activeSession
     val currentSessionModel = activeSession?.selectedModel ?: project.selectedModel ?: globalSelectedModel
+    
+    val clipboardManager = LocalClipboardManager.current
 
     val imagePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetMultipleContents()
@@ -484,11 +488,37 @@ fun ChatInterface(
             IconButton(onClick = { viewModel.createNewSession(project.id) }) {
                 Icon(Icons.Rounded.Add, contentDescription = "New Chat")
             }
+            IconButton(onClick = { showImportChat = !showImportChat }) {
+                Icon(Icons.Default.UploadFile, contentDescription = "Import Chat")
+            }
             IconButton(onClick = { showHistory = !showHistory }) {
                 Icon(Icons.Rounded.History, contentDescription = "History")
             }
         }
         
+        if (showImportChat) {
+            var importJson by remember { mutableStateOf("") }
+            Column(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)) {
+                OutlinedTextField(
+                    value = importJson,
+                    onValueChange = { importJson = it },
+                    label = { Text("Paste Chat JSON") },
+                    modifier = Modifier.fillMaxWidth().height(100.dp),
+                    textStyle = MaterialTheme.typography.bodySmall
+                )
+                Button(
+                    onClick = {
+                        viewModel.importSession(project.id, importJson)
+                        showImportChat = false
+                    },
+                    modifier = Modifier.align(Alignment.End).padding(top = 4.dp),
+                    enabled = importJson.isNotBlank()
+                ) {
+                    Text("Import")
+                }
+            }
+        }
+
         if (activeSession != null && activeSession.lastTokenCount > 0) {
             val limit = viewModel.getTokenLimit(currentSessionModel)
             val usage = activeSession.lastTokenCount.toFloat() / limit
@@ -536,11 +566,41 @@ fun ChatInterface(
                                 MaterialTheme.colorScheme.surfaceVariant
                         )
                     ) {
-                        Text(
-                            text = session.title,
-                            modifier = Modifier.padding(8.dp),
-                            style = MaterialTheme.typography.bodySmall
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(8.dp)
+                        ) {
+                            Text(
+                                text = session.title,
+                                modifier = Modifier.weight(1f),
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                            IconButton(
+                                onClick = {
+                                    val json = viewModel.getSessionJson(session)
+                                    clipboardManager.setText(AnnotatedString(json))
+                                    Toast.makeText(context, "Chat JSON copied", Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Rounded.ContentCopy, 
+                                    contentDescription = "Copy JSON",
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            IconButton(
+                                onClick = { viewModel.deleteSession(project.id, session.id) },
+                                modifier = Modifier.size(24.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Delete, 
+                                    contentDescription = "Delete", 
+                                    tint = MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                        }
                     }
                 }
             }
