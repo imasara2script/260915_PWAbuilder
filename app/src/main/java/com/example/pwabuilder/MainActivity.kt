@@ -7,6 +7,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -48,9 +49,13 @@ import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -155,6 +160,9 @@ class MainActivity : ComponentActivity() {
                                     onPreviewProject = { project ->
                                         backStack.add(PwaDestinations.PwaPreview(project.id))
                                     },
+                                    onProjectSettings = { project ->
+                                        backStack.add(PwaDestinations.ProjectSettings(project.id))
+                                    },
                                     onAddProject = {
                                         backStack.add(PwaDestinations.AiEditor)
                                     },
@@ -165,6 +173,21 @@ class MainActivity : ComponentActivity() {
                                         backStack.add(PwaDestinations.ImportProject)
                                     }
                                 )
+                            }
+                            entry<PwaDestinations.ProjectSettings>(
+                                metadata = ListDetailSceneStrategy.detailPane()
+                            ) { key ->
+                                val projectList by viewModel.projects.collectAsState()
+                                val project = projectList.find { it.id == key.projectId }
+                                if (project != null) {
+                                    ProjectSettingsScreen(
+                                        project = project,
+                                        onBack = { backStack.removeLastOrNull() },
+                                        onDeleted = { backStack.removeLastOrNull() }
+                                    )
+                                } else {
+                                    Text("Project not found")
+                                }
                             }
                             entry<PwaDestinations.ImportProject>(
                                 metadata = ListDetailSceneStrategy.detailPane()
@@ -296,6 +319,7 @@ class MainActivity : ComponentActivity() {
 @Composable
 fun ProjectDashboardScreen(
     onPreviewProject: (PwaProject) -> Unit,
+    onProjectSettings: (PwaProject) -> Unit,
     onAddProject: () -> Unit,
     onOpenSettings: () -> Unit,
     onImportProject: () -> Unit,
@@ -333,8 +357,85 @@ fun ProjectDashboardScreen(
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
             items(projects) { project ->
-                ProjectItem(project = project, onPreviewClick = { onPreviewProject(project) })
+                ProjectItem(
+                    project = project,
+                    onPreviewClick = { onPreviewProject(project) },
+                    onSettingsClick = { onProjectSettings(project) }
+                )
                 HorizontalDivider()
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ProjectSettingsScreen(
+    project: PwaProject,
+    onBack: () -> Unit,
+    onDeleted: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val viewModel = LocalPwaViewModel.current
+    var showDeleteConfirm by remember { mutableStateOf(false) }
+
+    if (showDeleteConfirm) {
+        AlertDialog(
+            onDismissRequest = { showDeleteConfirm = false },
+            title = { Text("Delete Project") },
+            text = { Text("Are you sure you want to delete '${project.name}'? This action cannot be undone.") },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        viewModel.deleteProject(project.id)
+                        showDeleteConfirm = false
+                        onDeleted()
+                    },
+                    colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error)
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteConfirm = false }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("Project Settings") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
+            Text(text = project.name, style = MaterialTheme.typography.headlineMedium)
+            Text(text = "${project.files.size} files", style = MaterialTheme.typography.bodyMedium)
+            
+            Spacer(modifier = Modifier.height(24.dp))
+            
+            Button(
+                onClick = { showDeleteConfirm = true },
+                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Delete, contentDescription = null)
+                Spacer(modifier = Modifier.size(8.dp))
+                Text("Delete Project")
             }
         }
     }
@@ -637,7 +738,7 @@ fun AiEditorScreen(
 @Composable
 fun ProjectDashboardPreview() {
     PWABuilderTheme {
-        ProjectDashboardScreen(onPreviewProject = {}, onAddProject = {}, onOpenSettings = {}, onImportProject = {})
+        ProjectDashboardScreen(onPreviewProject = {}, onProjectSettings = {}, onAddProject = {}, onOpenSettings = {}, onImportProject = {})
     }
 }
 
@@ -650,14 +751,18 @@ fun AiEditorPreview() {
 }
 
 @Composable
-fun ProjectItem(project: PwaProject, onPreviewClick: () -> Unit) {
+fun ProjectItem(project: PwaProject, onPreviewClick: () -> Unit, onSettingsClick: () -> Unit) {
     Row(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Column(modifier = Modifier.weight(1f)) {
+        Column(
+            modifier = Modifier
+                .weight(1f)
+                .clickable { onSettingsClick() }
+        ) {
             Text(text = project.name, style = MaterialTheme.typography.titleMedium)
             Text(text = "${project.files.size} files", style = MaterialTheme.typography.bodySmall)
         }

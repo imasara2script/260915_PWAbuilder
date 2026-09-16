@@ -89,6 +89,11 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         _projects.value = storage.getAllProjects()
     }
 
+    fun deleteProject(projectId: String) {
+        storage.deleteProject(projectId)
+        loadProjects()
+    }
+
     fun updateApiKey(key: String) {
         _apiKey.value = key
         storage.saveApiKey(key)
