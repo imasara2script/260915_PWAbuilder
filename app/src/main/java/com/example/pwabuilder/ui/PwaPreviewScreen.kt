@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddHome
 import androidx.compose.material.icons.rounded.CloudUpload
@@ -42,6 +43,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -97,10 +99,16 @@ fun PwaPreviewScreen(
     var showChat by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
     var showJsonViewer by remember { mutableStateOf(false) }
+    var showUpdateSheet by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
     val jsonSheetState = rememberModalBottomSheetState()
+    val updateSheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
+
+    var selectedExportFiles by remember(project) { 
+        mutableStateOf(project.files.map { it.name }.toSet()) 
+    }
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -165,6 +173,14 @@ fun PwaPreviewScreen(
                                     showMenu = false
                                 },
                                 leadingIcon = { Icon(Icons.Rounded.Terminal, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Update Project from JSON") },
+                                onClick = {
+                                    showUpdateSheet = true
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Default.UploadFile, contentDescription = null) }
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -275,12 +291,14 @@ fun PwaPreviewScreen(
             onDismissRequest = { showJsonViewer = false },
             sheetState = jsonSheetState
         ) {
-            val json = remember(project) { viewModel.getProjectJson(project) }
+            val json = remember(project, selectedExportFiles) { 
+                viewModel.getProjectJson(project, selectedExportFiles.toList()) 
+            }
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(16.dp)
-                    .height(500.dp)
+                    .height(600.dp)
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Project JSON", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
@@ -293,7 +311,30 @@ fun PwaPreviewScreen(
                         Text("Copy")
                     }
                 }
+                
                 Spacer(modifier = Modifier.height(16.dp))
+                
+                Text("Select Files to Include:", style = MaterialTheme.typography.labelLarge)
+                LazyRow(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    items(project.files) { file ->
+                        FilterChip(
+                            selected = file.name in selectedExportFiles,
+                            onClick = {
+                                selectedExportFiles = if (file.name in selectedExportFiles) {
+                                    selectedExportFiles - file.name
+                                } else {
+                                    selectedExportFiles + file.name
+                                }
+                            },
+                            label = { Text(file.name) }
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
                 Card(
                     modifier = Modifier.fillMaxSize(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -307,6 +348,48 @@ fun PwaPreviewScreen(
                             )
                         }
                     }
+                }
+            }
+        }
+    }
+
+    if (showUpdateSheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showUpdateSheet = false },
+            sheetState = updateSheetState
+        ) {
+            var updateJsonText by remember { mutableStateOf("") }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .height(500.dp)
+            ) {
+                Text("Update Project from AI JSON", style = MaterialTheme.typography.titleLarge)
+                Text(
+                    "Paste JSON from AI to update or add files in this project.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                OutlinedTextField(
+                    value = updateJsonText,
+                    onValueChange = { updateJsonText = it },
+                    label = { Text("AI JSON Content") },
+                    modifier = Modifier.fillMaxWidth().weight(1f),
+                    placeholder = { Text("{ \"files\": [...] }") }
+                )
+                Spacer(modifier = Modifier.height(16.dp))
+                Button(
+                    onClick = {
+                        viewModel.updateProjectWithJson(project.id, updateJsonText)
+                        scope.launch { updateSheetState.hide() }.invokeOnCompletion {
+                            if (!updateSheetState.isVisible) showUpdateSheet = false
+                        }
+                    },
+                    enabled = updateJsonText.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Apply Updates")
                 }
             }
         }
