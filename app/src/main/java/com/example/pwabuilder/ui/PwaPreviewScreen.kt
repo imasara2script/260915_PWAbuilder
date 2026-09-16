@@ -23,15 +23,19 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material.icons.rounded.AddHome
 import androidx.compose.material.icons.rounded.CloudUpload
+import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.History
 import androidx.compose.material.icons.rounded.Image
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Terminal
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,9 +64,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import android.widget.Toast
 import coil.compose.AsyncImage
 import com.example.pwabuilder.LocalPwaViewModel
 import com.example.pwabuilder.data.PwaProject
@@ -89,8 +96,11 @@ fun PwaPreviewScreen(
     
     var showChat by remember { mutableStateOf(false) }
     var showMenu by remember { mutableStateOf(false) }
+    var showJsonViewer by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState()
+    val jsonSheetState = rememberModalBottomSheetState()
     val scope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
@@ -147,6 +157,14 @@ fun PwaPreviewScreen(
                                     showMenu = false
                                 },
                                 leadingIcon = { Icon(Icons.Rounded.Share, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("View/Copy Project JSON") },
+                                onClick = {
+                                    showJsonViewer = true
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Rounded.Terminal, contentDescription = null) }
                             )
                             HorizontalDivider()
                             DropdownMenuItem(
@@ -249,6 +267,48 @@ fun PwaPreviewScreen(
                     }
                 }
             )
+        }
+    }
+
+    if (showJsonViewer) {
+        ModalBottomSheet(
+            onDismissRequest = { showJsonViewer = false },
+            sheetState = jsonSheetState
+        ) {
+            val json = remember(project) { viewModel.getProjectJson(project) }
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .height(500.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Project JSON", style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f))
+                    Button(onClick = {
+                        clipboardManager.setText(AnnotatedString(json))
+                        Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Icon(Icons.Rounded.ContentCopy, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text("Copy")
+                    }
+                }
+                Spacer(modifier = Modifier.height(16.dp))
+                Card(
+                    modifier = Modifier.fillMaxSize(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    LazyColumn(modifier = Modifier.padding(8.dp)) {
+                        item {
+                            Text(
+                                text = json,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 }
