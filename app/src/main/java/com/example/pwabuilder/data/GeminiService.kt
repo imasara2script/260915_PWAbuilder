@@ -10,6 +10,8 @@ import okhttp3.Request
 import org.json.JSONObject
 import java.io.File
 
+data class PwaGenerationResult(val text: String, val totalTokenCount: Int)
+
 class GeminiService {
     private val client = OkHttpClient()
     
@@ -41,7 +43,7 @@ class GeminiService {
         }
     }
     
-    suspend fun generatePwa(apiKey: String, modelName: String, prompt: String, imageFiles: List<File> = emptyList()): String {
+    suspend fun generatePwa(apiKey: String, modelName: String, prompt: String, imageFiles: List<File> = emptyList()): PwaGenerationResult {
         val generativeModel = GenerativeModel(
             modelName = modelName,
             apiKey = apiKey
@@ -74,7 +76,7 @@ class GeminiService {
             }
             generativeModel.generateContent(contentParts)
         }
-        return response.text ?: ""
+        return PwaGenerationResult(response.text ?: "", response.usageMetadata?.totalTokenCount ?: 0)
     }
 
     suspend fun refinePwa(
@@ -84,7 +86,7 @@ class GeminiService {
         history: List<ChatMessage>,
         instruction: String,
         imageFiles: List<File> = emptyList()
-    ): String {
+    ): PwaGenerationResult {
         val generativeModel = GenerativeModel(
             modelName = modelName,
             apiKey = apiKey
@@ -131,7 +133,7 @@ class GeminiService {
             }
             generativeModel.generateContent(contentParts)
         }
-        return response.text ?: ""
+        return PwaGenerationResult(response.text ?: "", response.usageMetadata?.totalTokenCount ?: 0)
     }
 
     fun parsePwaResponse(response: String): List<PwaFile> {

@@ -47,6 +47,7 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
@@ -452,6 +453,32 @@ fun ChatInterface(
             }
         }
         
+        if (activeSession != null && activeSession.lastTokenCount > 0) {
+            val limit = viewModel.getTokenLimit()
+            val usage = activeSession.lastTokenCount.toFloat() / limit
+            Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = "Token Usage: ${activeSession.lastTokenCount} / $limit",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (usage > 0.8f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Text(
+                        text = "${(usage * 100).toInt()}%",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = if (usage > 0.8f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                    )
+                }
+                LinearProgressIndicator(
+                    progress = { usage },
+                    modifier = Modifier.fillMaxWidth().height(4.dp).clip(MaterialTheme.shapes.extraSmall),
+                    color = if (usage > 0.8f) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                    trackColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
         
         if (showHistory) {

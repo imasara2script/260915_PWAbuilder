@@ -8,7 +8,12 @@ import java.io.File
 
 data class PwaFile(val name: String, val content: String)
 data class ChatMessage(val role: String, val content: String)
-data class ChatSession(val id: String, val title: String, val messages: List<ChatMessage>)
+data class ChatSession(
+    val id: String, 
+    val title: String, 
+    val messages: List<ChatMessage>,
+    val lastTokenCount: Int = 0
+)
 
 data class PwaProject(
     val id: String,
@@ -77,6 +82,7 @@ class PwaStorage(private val context: Context) {
             val sessionJson = JSONObject().apply {
                 put("id", session.id)
                 put("title", session.title)
+                put("lastTokenCount", session.lastTokenCount)
                 val msgArray = JSONArray()
                 session.messages.forEach { msg ->
                     msgArray.put(JSONObject().apply {
@@ -149,7 +155,8 @@ class PwaStorage(private val context: Context) {
                         chatSessions.add(ChatSession(
                             sessionJson.getString("id"),
                             sessionJson.getString("title"),
-                            msgList
+                            msgList,
+                            sessionJson.optInt("lastTokenCount", 0)
                         ))
                     }
                 } else {

@@ -367,7 +367,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _lastError.value = null
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
-                val response = geminiService.generatePwa(_apiKey.value, _selectedModel.value, prompt, files)
+                val result = geminiService.generatePwa(_apiKey.value, _selectedModel.value, prompt, files)
+                val response = result.text
                 if (response.isBlank()) {
                     val errorMsg = "Empty response from AI. Please check your prompt and API key."
                     _lastError.value = errorMsg
@@ -387,7 +388,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                     id = UUID.randomUUID().toString(),
                     name = name,
                     files = filesParsed,
-                    chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt)))),
+                    chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt)), result.totalTokenCount)),
                     activeSessionId = null
                 )
                 storage.saveProject(project)
@@ -429,7 +430,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _lastError.value = null
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
-                val response = geminiService.refinePwa(_apiKey.value, _selectedModel.value, project, activeSession.messages, instruction, files)
+                val result = geminiService.refinePwa(_apiKey.value, _selectedModel.value, project, activeSession.messages, instruction, files)
+                val response = result.text
                 if (response.isBlank()) {
                     _errorEvents.emit("Empty response from AI")
                     return@launch
@@ -445,7 +447,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 val updatedMessages = activeSession.messages + newMessage
                 val updatedTitle = if (activeSession.messages.isEmpty()) instruction.take(30) + "..." else activeSession.title
                 
-                val updatedSession = activeSession.copy(messages = updatedMessages, title = updatedTitle)
+                val updatedSession = activeSession.copy(messages = updatedMessages, title = updatedTitle, lastTokenCount = result.totalTokenCount)
                 val updatedSessions = if (project.chatSessions.any { it.id == activeSession.id }) {
                     project.chatSessions.map { if (it.id == activeSession.id) updatedSession else it }
                 } else {
@@ -467,5 +469,9 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 _isGenerating.value = false
             }
         }
+    }
+
+    fun getTokenLimit(): Int {
+        return if (_selectedModel.value.contains("pro", ignoreCase = true)) 2097152 else 1048576
     }
 }
