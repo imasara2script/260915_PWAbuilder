@@ -101,6 +101,8 @@ fun PwaPreviewScreen(
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     
     var showChat by remember { mutableStateOf(false) }
+    var chatInputText by remember { mutableStateOf("") }
+    var chatSelectedImagePaths by remember { mutableStateOf<List<String>>(emptyList()) }
     var showMenu by remember { mutableStateOf(false) }
     var showJsonViewer by remember { mutableStateOf(false) }
     var showUpdateSheet by remember { mutableStateOf(false) }
@@ -278,8 +280,14 @@ fun PwaPreviewScreen(
         ) {
             ChatInterface(
                 project = project,
+                chatInputText = chatInputText,
+                onChatInputChanged = { chatInputText = it },
+                selectedImagePaths = chatSelectedImagePaths,
+                onSelectedImagePathsChanged = { chatSelectedImagePaths = it },
                 onSend = { instruction, imagePaths ->
                     viewModel.refinePwa(project.id, instruction, imagePaths)
+                    chatInputText = ""
+                    chatSelectedImagePaths = emptyList()
                     scope.launch { sheetState.hide() }.invokeOnCompletion {
                         if (!sheetState.isVisible) {
                             showChat = false
@@ -413,13 +421,15 @@ fun PwaPreviewScreen(
 @Composable
 fun ChatInterface(
     project: PwaProject,
+    chatInputText: String,
+    onChatInputChanged: (String) -> Unit,
+    selectedImagePaths: List<String>,
+    onSelectedImagePathsChanged: (List<String>) -> Unit,
     onSend: (String, List<String>) -> Unit,
     onReset: (Int, String) -> Unit
 ) {
     val context = LocalContext.current
     val viewModel = LocalPwaViewModel.current
-    var text by remember { mutableStateOf("") }
-    var selectedImagePaths by remember { mutableStateOf<List<String>>(emptyList()) }
     var showHistory by remember { mutableStateOf(false) }
     var showImportChat by remember { mutableStateOf(false) }
     
@@ -449,7 +459,7 @@ fun ChatInterface(
                 null
             }
         }
-        selectedImagePaths = selectedImagePaths + paths
+        onSelectedImagePathsChanged(selectedImagePaths + paths)
     }
 
     Column(
@@ -690,7 +700,7 @@ fun ChatInterface(
                             contentScale = ContentScale.Crop
                         )
                         IconButton(
-                            onClick = { selectedImagePaths = selectedImagePaths - path },
+                            onClick = { onSelectedImagePathsChanged(selectedImagePaths - path) },
                             modifier = Modifier
                                 .size(20.dp)
                                 .align(Alignment.TopEnd)
@@ -717,17 +727,15 @@ fun ChatInterface(
                 Icon(Icons.Rounded.Image, contentDescription = "Add Image")
             }
             OutlinedTextField(
-                value = text,
-                onValueChange = { text = it },
+                value = chatInputText,
+                onValueChange = onChatInputChanged,
                 modifier = Modifier.weight(1f),
                 placeholder = { Text("Instruction...") }
             )
             IconButton(
                 onClick = {
-                    if (text.isNotBlank() || selectedImagePaths.isNotEmpty()) {
-                        onSend(text, selectedImagePaths)
-                        text = ""
-                        selectedImagePaths = emptyList()
+                    if (chatInputText.isNotBlank() || selectedImagePaths.isNotEmpty()) {
+                        onSend(chatInputText, selectedImagePaths)
                     }
                 }
             ) {
