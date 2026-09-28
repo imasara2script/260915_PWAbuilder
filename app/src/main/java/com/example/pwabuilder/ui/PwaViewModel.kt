@@ -141,6 +141,14 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         storage.saveGithubToken(token)
     }
 
+    fun getMasterPassword(): String {
+        return storage.getMasterPassword()
+    }
+
+    fun saveMasterPassword(password: String) {
+        storage.saveMasterPassword(password)
+    }
+
     fun uploadToGithub(context: Context, project: PwaProject) {
         viewModelScope.launch {
             if (_githubToken.value.isBlank()) {

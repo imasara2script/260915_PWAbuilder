@@ -59,6 +59,14 @@ class PwaStorage(private val context: Context) {
         return prefs.getString("github_token", "") ?: ""
     }
 
+    fun saveMasterPassword(password: String) {
+        prefs.edit().putString("master_password", password).apply()
+    }
+
+    fun getMasterPassword(): String {
+        return prefs.getString("master_password", "") ?: ""
+    }
+
     fun saveSelectedModel(model: String) {
         prefs.edit().putString("selected_model", model).apply()
     }

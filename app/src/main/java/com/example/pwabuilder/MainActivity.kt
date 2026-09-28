@@ -30,6 +30,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
@@ -75,6 +76,7 @@ import androidx.navigation3.ui.NavDisplay
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.tooling.preview.PreviewScreenSizes
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import com.example.pwabuilder.data.PwaFile
 import com.example.pwabuilder.data.PwaProject
 import com.example.pwabuilder.data.PwaStorage
@@ -630,6 +632,133 @@ fun SettingsScreen(
 
     var expandedModelDropdown by remember { mutableStateOf(false) }
 
+    var isRevealed by remember { mutableStateOf(false) }
+    var showPasswordDialog by remember { mutableStateOf(false) }
+    var showSetPasswordDialog by remember { mutableStateOf(false) }
+    var passwordInput by remember { mutableStateOf("") }
+    var confirmPasswordInput by remember { mutableStateOf("") }
+    var passwordError by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+
+    if (showSetPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showSetPasswordDialog = false
+                passwordInput = ""
+                confirmPasswordInput = ""
+            },
+            title = { Text("Set Master Password") },
+            text = {
+                Column {
+                    Text("Set a master password to protect and reveal your API credentials.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = passwordInput,
+                        onValueChange = { passwordInput = it },
+                        label = { Text("Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = confirmPasswordInput,
+                        onValueChange = { confirmPasswordInput = it },
+                        label = { Text("Confirm Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (passwordError) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Passwords do not match or empty", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (passwordInput.isNotBlank() && passwordInput == confirmPasswordInput) {
+                            viewModel.saveMasterPassword(passwordInput)
+                            showSetPasswordDialog = false
+                            passwordInput = ""
+                            confirmPasswordInput = ""
+                            passwordError = false
+                            isRevealed = true
+                            Toast.makeText(context, "Master password set successfully!", Toast.LENGTH_SHORT).show()
+                        } else {
+                            passwordError = true
+                        }
+                    }
+                ) {
+                    Text("Set & Reveal")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showSetPasswordDialog = false
+                    passwordInput = ""
+                    confirmPasswordInput = ""
+                    passwordError = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    if (showPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { 
+                showPasswordDialog = false
+                passwordInput = ""
+                passwordError = false
+            },
+            title = { Text("Enter Master Password") },
+            text = {
+                Column {
+                    Text("Enter your master password to reveal API credentials.")
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = passwordInput,
+                        onValueChange = { passwordInput = it },
+                        label = { Text("Master Password") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    if (passwordError) {
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text("Incorrect password", color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val savedPass = viewModel.getMasterPassword()
+                        if (passwordInput == savedPass) {
+                            showPasswordDialog = false
+                            passwordInput = ""
+                            passwordError = false
+                            isRevealed = true
+                        } else {
+                            passwordError = true
+                        }
+                    }
+                ) {
+                    Text("Reveal")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { 
+                    showPasswordDialog = false
+                    passwordInput = ""
+                    passwordError = false
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
     Scaffold(
         modifier = modifier.fillMaxSize(),
         topBar = {
@@ -657,7 +786,7 @@ fun SettingsScreen(
                 onValueChange = { viewModel.updateApiKey(it) },
                 label = { Text("Gemini API Key") },
                 modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation()
+                visualTransformation = if (isRevealed) VisualTransformation.None else PasswordVisualTransformation()
             )
             
             Spacer(modifier = Modifier.height(8.dp))
@@ -667,8 +796,46 @@ fun SettingsScreen(
                 onValueChange = { viewModel.updateGithubToken(it) },
                 label = { Text("GitHub Token (PAT)") },
                 modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation()
+                visualTransformation = if (isRevealed) VisualTransformation.None else PasswordVisualTransformation()
             )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                if (!isRevealed) {
+                    Button(
+                        onClick = {
+                            val savedPass = viewModel.getMasterPassword()
+                            if (savedPass.isBlank()) {
+                                showSetPasswordDialog = true
+                            } else {
+                                showPasswordDialog = true
+                            }
+                        },
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text("Reveal with Password")
+                    }
+                } else {
+                    Button(
+                        onClick = { isRevealed = false },
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                    ) {
+                        Text("Hide Keys")
+                    }
+                }
+
+                OutlinedButton(
+                    onClick = { showSetPasswordDialog = true },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Change Password")
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
             Text("Default Configuration", style = MaterialTheme.typography.titleMedium)
