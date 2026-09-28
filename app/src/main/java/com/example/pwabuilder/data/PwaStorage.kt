@@ -26,7 +26,8 @@ data class PwaProject(
     val files: List<PwaFile>,
     val chatSessions: List<ChatSession> = emptyList(),
     val activeSessionId: String? = null,
-    val selectedModel: String? = null
+    val selectedModel: String? = null,
+    val githubRepoName: String? = null
 ) {
     val activeSession: ChatSession?
         get() = chatSessions.find { it.id == activeSessionId } ?: chatSessions.lastOrNull()
@@ -80,6 +81,7 @@ class PwaStorage(private val context: Context) {
             put("name", project.name)
             put("activeSessionId", project.activeSessionId)
             put("selectedModel", project.selectedModel)
+            put("githubRepoName", project.githubRepoName ?: "")
         }
         File(projectDir, ".metadata").writeText(metadata.toString())
         
@@ -144,12 +146,14 @@ class PwaStorage(private val context: Context) {
         var name = "Untitled"
         var activeSessionId: String? = null
         var selectedModel: String? = null
+        var githubRepoName: String? = null
         if (metadataFile.exists()) {
             try {
                 val json = JSONObject(metadataFile.readText())
                 name = json.optString("name", "Untitled")
                 activeSessionId = json.optString("activeSessionId").takeIf { it.isNotEmpty() }
                 selectedModel = json.optString("selectedModel").takeIf { it.isNotEmpty() }
+                githubRepoName = json.optString("githubRepoName").takeIf { it.isNotEmpty() }
             } catch (e: Exception) {
                 // Fallback for old format
                 val text = metadataFile.readText()
@@ -218,7 +222,7 @@ class PwaStorage(private val context: Context) {
                 PwaFile(file.name, file.readText())
             }
         } ?: emptyList()
-        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel)
+        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel, githubRepoName)
     }
 
     private fun isImageFile(name: String): Boolean {

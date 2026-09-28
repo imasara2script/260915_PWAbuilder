@@ -101,6 +101,13 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
+    fun updateProjectGithubRepoName(projectId: String, repoName: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedProject = project.copy(githubRepoName = repoName)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
     fun setProjectModel(projectId: String, model: String) {
         val project = _projects.value.find { it.id == projectId } ?: return
         val updatedProject = project.copy(selectedModel = model)
@@ -141,7 +148,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _lastError.value = null
             
             // Format repo name: alphanumeric and hyphens only
-            val repoName = project.name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)
+            val repoName = project.githubRepoName?.takeIf { it.isNotBlank() } 
+                ?: project.name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)
             
             val result = githubService.uploadToGitHub(_githubToken.value, repoName, project.files)
             if (result.isSuccess) {

@@ -378,6 +378,9 @@ fun ProjectSettingsScreen(
     val viewModel = LocalPwaViewModel.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var projectName by remember(project) { mutableStateOf(project.name) }
+    var githubRepoName by remember(project) { 
+        mutableStateOf(project.githubRepoName ?: project.name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)) 
+    }
     
     val availableModels by viewModel.availableModels.collectAsState()
     val globalSelectedModel by viewModel.selectedModel.collectAsState()
@@ -445,6 +448,26 @@ fun ProjectSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save Name")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            OutlinedTextField(
+                value = githubRepoName,
+                onValueChange = { githubRepoName = it },
+                label = { Text("GitHub Repository Name") },
+                modifier = Modifier.fillMaxWidth(),
+                supportingText = { Text("Used as the repository name when uploading to GitHub") }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.updateProjectGithubRepoName(project.id, githubRepoName) },
+                enabled = githubRepoName.isNotBlank() && githubRepoName != project.githubRepoName,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save GitHub Repository Name")
             }
 
             Spacer(modifier = Modifier.height(24.dp))
