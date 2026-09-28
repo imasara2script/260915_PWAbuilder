@@ -141,6 +141,21 @@ class MainActivity : ComponentActivity() {
                             Toast.makeText(context, error, Toast.LENGTH_LONG).show()
                         }
                     }
+
+                    val lastError by viewModel.lastError.collectAsState()
+                    if (lastError != null) {
+                        AlertDialog(
+                            onDismissRequest = { viewModel.clearError() },
+                            title = { Text("Error Details") },
+                            text = { Text(lastError!!) },
+                            confirmButton = {
+                                TextButton(onClick = { viewModel.clearError() }) {
+                                    Text("OK")
+                                }
+                            }
+                        )
+                    }
+
                     NavDisplay(
                         backStack = backStack,
                         onBack = { backStack.removeLastOrNull() },

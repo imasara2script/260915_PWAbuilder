@@ -41,7 +41,8 @@ class GitHubService {
         try {
             val userResp = makeRequest(token, "https://api.github.com/user", "GET")
             if (!userResp.isSuccessful || userResp.body == null) {
-                return@withContext Result.failure(Exception("Failed to get user info. Please check your GitHub Token."))
+                val errDetails = userResp.body ?: "HTTP ${userResp.code}"
+                return@withContext Result.failure(Exception("GitHub Authentication failed (Check your PAT validity/scope). Details: $errDetails"))
             }
             val userJson = JSONObject(userResp.body)
             val username = userJson.getString("login")
@@ -66,7 +67,7 @@ class GitHubService {
                 if (createResp.code == 422 || errBody.contains("name already exists", ignoreCase = true)) {
                     return@withContext Result.failure(Exception("Repository '$repoName' already exists. Please specify a different repository name in project settings."))
                 } else {
-                    return@withContext Result.failure(Exception("Failed to create repository: $errBody"))
+                    return@withContext Result.failure(Exception("Failed to create repository. Details: $errBody (HTTP ${createResp.code})"))
                 }
             }
 
@@ -81,7 +82,7 @@ class GitHubService {
             }
             
             if (!branchResp.isSuccessful || branchResp.body == null) {
-                return@withContext Result.failure(Exception("Failed to get main branch info for repository '$repoName'."))
+                return@withContext Result.failure(Exception("Failed to get main branch info for repository '$repoName'. Details: ${branchResp.body ?: "HTTP ${branchResp.code}"}"))
             }
 
             val branchJson = JSONObject(branchResp.body)
@@ -107,9 +108,24 @@ class GitHubService {
             }
             val treeResp = makeRequest(token, createTreeUrl, "POST", treePayload.toString())
             if (!treeResp.isSuccessful || treeResp.body == null) {
-                return@withContext Result.failure(Exception("Failed to create git tree."))
+                return@withContext Result.failure(Exception("Failed to create git tree. Details: ${treeResp.body ?: "HTTP ${treeResp.code}"}"))
             }
             val newTreeSha = JSONObject(treeResp.body).getString("sha")
+
+            // Check if tree is identical to base tree (no changes detected)
+            if (baseTreeSha == newTreeSha) {
+                // Ensure pages is enabled and return success directly
+                val pagesUrl = "https://api.github.com/repos/$username/$repoName/pages"
+                val pagesPayload = JSONObject().apply {
+                    put("source", JSONObject().apply {
+                        put("branch", "main")
+                        put("path", "/")
+                    })
+                }
+                makeRequest(token, pagesUrl, "POST", pagesPayload.toString())
+
+                return@withContext Result.success("https://$username.github.io/$repoName/")
+            }
 
             // 4. Create Commit
             val createCommitUrl = "https://api.github.com/repos/$username/$repoName/git/commits"
@@ -120,7 +136,7 @@ class GitHubService {
             }
             val commitResp = makeRequest(token, createCommitUrl, "POST", commitPayload.toString())
             if (!commitResp.isSuccessful || commitResp.body == null) {
-                return@withContext Result.failure(Exception("Failed to create git commit."))
+                return@withContext Result.failure(Exception("Failed to create git commit. Details: ${commitResp.body ?: "HTTP ${commitResp.code}"}"))
             }
             val newCommitSha = JSONObject(commitResp.body).getString("sha")
 
@@ -132,7 +148,7 @@ class GitHubService {
             }
             val refResp = makeRequest(token, updateRefUrl, "PATCH", refPayload.toString())
             if (!refResp.isSuccessful) {
-                return@withContext Result.failure(Exception("Failed to update branch reference."))
+                return@withContext Result.failure(Exception("Failed to update branch reference. Details: ${refResp.body ?: "HTTP ${refResp.code}"}"))
             }
 
             // 6. Enable Pages if not enabled
@@ -153,14 +169,14 @@ class GitHubService {
     }
 
     suspend fun waitForDeployment(targetUrl: String): Boolean = withContext(Dispatchers.IO) {
-        repeat(20) { // Max 2 minutes
+        repeat(40) { // Max ~6 minutes (40 * 10 seconds)
             try {
                 val request = Request.Builder().url(targetUrl).build()
                 client.newCall(request).execute().use { response ->
                     if (response.isSuccessful) return@withContext true
                 }
             } catch (e: Exception) { }
-            delay(6000)
+            delay(10000) // 10 seconds delay
         }
         false
     }

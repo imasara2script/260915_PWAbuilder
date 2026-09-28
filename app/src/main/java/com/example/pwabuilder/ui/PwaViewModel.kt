@@ -148,7 +148,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 return@launch
             }
             _isUploading.value = true
-            _uploadStatus.value = "Uploading to GitHub..."
+            _uploadStatus.value = "Uploading to GitHub & enabling Pages..."
             _lastError.value = null
             
             // Format repo name: alphanumeric and hyphens only
@@ -158,17 +158,25 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             val result = githubService.uploadToGitHub(_githubToken.value, repoName, project.files)
             if (result.isSuccess) {
                 val url = result.getOrNull()!!
-                _uploadStatus.value = "Waiting for GitHub Pages deployment..."
+                _uploadStatus.value = "Waiting for GitHub Pages deployment (this may take 1-3 mins)..."
                 Toast.makeText(context, "Uploaded to GitHub! Waiting for Pages deployment...", Toast.LENGTH_LONG).show()
                 
                 val deployed = githubService.waitForDeployment(url)
-                if (deployed) {
+                
+                try {
                     val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url)).apply {
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
                     }
                     context.startActivity(intent)
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    _lastError.value = "Failed to open browser: ${e.message}. URL: $url"
+                }
+                
+                if (deployed) {
+                    Toast.makeText(context, "GitHub Pages is ready!", Toast.LENGTH_SHORT).show()
                 } else {
-                    _lastError.value = "Upload successful, but Pages deployment timed out. Please check manually: $url"
+                    _lastError.value = "Pages deployment check timed out, but opened URL: $url"
                 }
             } else {
                 _lastError.value = "GitHub Upload failed: ${result.exceptionOrNull()?.message}"
