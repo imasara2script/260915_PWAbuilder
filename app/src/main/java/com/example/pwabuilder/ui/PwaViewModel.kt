@@ -45,6 +45,9 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
     private val _isUploading = MutableStateFlow(false)
     val isUploading: StateFlow<Boolean> = _isUploading
 
+    private val _uploadStatus = MutableStateFlow<String?>(null)
+    val uploadStatus: StateFlow<String?> = _uploadStatus
+
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError
 
@@ -145,6 +148,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 return@launch
             }
             _isUploading.value = true
+            _uploadStatus.value = "Uploading to GitHub..."
             _lastError.value = null
             
             // Format repo name: alphanumeric and hyphens only
@@ -154,6 +158,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             val result = githubService.uploadToGitHub(_githubToken.value, repoName, project.files)
             if (result.isSuccess) {
                 val url = result.getOrNull()!!
+                _uploadStatus.value = "Waiting for GitHub Pages deployment..."
                 Toast.makeText(context, "Uploaded to GitHub! Waiting for Pages deployment...", Toast.LENGTH_LONG).show()
                 
                 val deployed = githubService.waitForDeployment(url)
@@ -169,6 +174,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 _lastError.value = "GitHub Upload failed: ${result.exceptionOrNull()?.message}"
             }
             _isUploading.value = false
+            _uploadStatus.value = null
         }
     }
 

@@ -97,6 +97,7 @@ fun PwaPreviewScreen(
     val context = LocalContext.current
     val viewModel = LocalPwaViewModel.current
     val isUploading by viewModel.isUploading.collectAsState()
+    val uploadStatus by viewModel.uploadStatus.collectAsState()
     val isGenerating by viewModel.isGenerating.collectAsState()
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     
@@ -266,6 +267,28 @@ fun PwaPreviewScreen(
                             CircularProgressIndicator()
                             Spacer(modifier = Modifier.height(16.dp))
                             Text("Refining PWA...")
+                        }
+                    }
+                }
+            }
+
+            if (isUploading) {
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.9f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator()
+                            Spacer(modifier = Modifier.height(16.dp))
+                            Text(uploadStatus ?: "Uploading to GitHub...")
                         }
                     }
                 }
