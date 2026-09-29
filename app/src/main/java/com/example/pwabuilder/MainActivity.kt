@@ -72,6 +72,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalUriHandler
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.entryProvider
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -806,7 +808,15 @@ fun SettingsScreen(
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
+            val uriHandler = LocalUriHandler.current
+
             Text("API Credentials", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Required for AI generation and GitHub deployment.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
             Spacer(modifier = Modifier.height(8.dp))
             
             OutlinedTextField(
@@ -816,8 +826,18 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (isRevealed) VisualTransformation.None else PasswordVisualTransformation()
             )
+            TextButton(
+                onClick = { uriHandler.openUri("https://aistudio.google.com/app/apikey") },
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    "Get Gemini API Key (Google AI Studio) ↗",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
             
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(4.dp))
             
             OutlinedTextField(
                 value = githubToken,
@@ -826,6 +846,16 @@ fun SettingsScreen(
                 modifier = Modifier.fillMaxWidth(),
                 visualTransformation = if (isRevealed) VisualTransformation.None else PasswordVisualTransformation()
             )
+            TextButton(
+                onClick = { uriHandler.openUri("https://github.com/settings/tokens/new?scopes=repo,workflow&description=PWABuilder") },
+                contentPadding = PaddingValues(0.dp)
+            ) {
+                Text(
+                    "Generate GitHub Personal Access Token (PAT) ↗",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 
