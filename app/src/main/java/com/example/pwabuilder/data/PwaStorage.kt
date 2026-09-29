@@ -13,7 +13,8 @@ data class PwaFile(val name: String, val content: String)
 data class ChatMessage(
     val role: String, 
     val content: String,
-    val snapshot: List<PwaFile>? = null
+    val snapshot: List<PwaFile>? = null,
+    val timestamp: Long = System.currentTimeMillis()
 )
 data class ChatSession(
     val id: String, 
@@ -109,6 +110,7 @@ class PwaStorage(private val context: Context) {
                     msgArray.put(JSONObject().apply {
                         put("role", msg.role)
                         put("content", msg.content)
+                        put("timestamp", msg.timestamp)
                         msg.snapshot?.let { snap ->
                             val snapArray = JSONArray()
                             snap.forEach { f ->
@@ -195,10 +197,12 @@ class PwaStorage(private val context: Context) {
                                 list
                             } else null
                             
+                            val timestamp = msgJson.optLong("timestamp", System.currentTimeMillis())
                             msgList.add(ChatMessage(
                                 msgJson.getString("role"), 
                                 msgJson.getString("content"),
-                                snapList
+                                snapList,
+                                timestamp
                             ))
                         }
                         chatSessions.add(ChatSession(

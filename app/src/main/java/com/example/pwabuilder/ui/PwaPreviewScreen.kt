@@ -90,6 +90,9 @@ import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileInputStream
 import java.net.URLConnection
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import java.util.UUID
 
 @SuppressLint("SetJavaScriptEnabled")
@@ -761,6 +764,17 @@ fun ChatInterface(
                         ) {
                             if (isEditing) {
                                 Column(modifier = Modifier.padding(8.dp)) {
+                                    val timeString = remember(msg.timestamp) {
+                                        SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(
+                                            Date(msg.timestamp)
+                                        )
+                                    }
+                                    Text(
+                                        text = timeString,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     OutlinedTextField(
                                         value = editText,
                                         onValueChange = { editText = it },
@@ -810,6 +824,17 @@ fun ChatInterface(
                                 }
                             } else {
                                 Column(modifier = Modifier.padding(8.dp)) {
+                                    val timeString = remember(msg.timestamp) {
+                                        SimpleDateFormat("MM/dd HH:mm", Locale.getDefault()).format(
+                                            Date(msg.timestamp)
+                                        )
+                                    }
+                                    Text(
+                                        text = timeString,
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = msg.content,
                                         style = MaterialTheme.typography.bodyMedium
