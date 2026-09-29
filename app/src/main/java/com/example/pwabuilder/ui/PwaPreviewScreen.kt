@@ -1,7 +1,11 @@
 package com.example.pwabuilder.ui
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.view.ViewGroup
+import android.webkit.JsPromptResult
+import android.webkit.JsResult
+import android.webkit.WebChromeClient
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -242,6 +246,27 @@ fun PwaPreviewScreen(
                         }
 
                         webViewClient = PwaWebViewClient(projectDir)
+                        webChromeClient = object : WebChromeClient() {
+                            override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
+                                AlertDialog.Builder(context)
+                                    .setTitle("Feature Not Available in Preview")
+                                    .setMessage("window.confirm() is not supported in this in-app preview.\nPlease upload to GitHub to preview in your full browser app.")
+                                    .setPositiveButton("OK") { _, _ -> result?.cancel() }
+                                    .setOnCancelListener { result?.cancel() }
+                                    .show()
+                                return true
+                            }
+
+                            override fun onJsPrompt(view: WebView?, url: String?, message: String?, defaultValue: String?, result: JsPromptResult?): Boolean {
+                                AlertDialog.Builder(context)
+                                    .setTitle("Feature Not Available in Preview")
+                                    .setMessage("window.prompt() is not supported in this in-app preview.\nPlease upload to GitHub to preview in your full browser app.")
+                                    .setPositiveButton("OK") { _, _ -> result?.cancel() }
+                                    .setOnCancelListener { result?.cancel() }
+                                    .show()
+                                return true
+                            }
+                        }
                         loadUrl("https://pwa.local/index.html")
                         webViewInstance = this
                     }
