@@ -21,6 +21,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -754,6 +755,39 @@ fun ChatInterface(
                                         modifier = Modifier.fillMaxWidth(),
                                         textStyle = MaterialTheme.typography.bodyMedium
                                     )
+                                    
+                                    if (msg.snapshot != null && msg.snapshot.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth(),
+                                            horizontalArrangement = Arrangement.SpaceBetween,
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(
+                                                text = "Snapshot: ${msg.snapshot.size} files",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                            Row {
+                                                TextButton(onClick = {
+                                                    val json = viewModel.getSnapshotJson(msg.snapshot)
+                                                    clipboardManager.setText(AnnotatedString(json))
+                                                    Toast.makeText(context, "Snapshot JSON copied", Toast.LENGTH_SHORT).show()
+                                                }) {
+                                                    Text("Export", style = MaterialTheme.typography.labelSmall)
+                                                }
+                                                TextButton(onClick = {
+                                                    if (project.activeSession != null) {
+                                                        viewModel.deleteSnapshot(project.id, project.activeSession!!.id, index)
+                                                        Toast.makeText(context, "Snapshot deleted", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }) {
+                                                    Text("Delete", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                                }
+                                            }
+                                        }
+                                    }
+
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                         TextButton(onClick = { isEditing = false }) { Text("Cancel") }
                                         TextButton(onClick = { 
@@ -763,11 +797,46 @@ fun ChatInterface(
                                     }
                                 }
                             } else {
-                                Text(
-                                    text = msg.content,
-                                    modifier = Modifier.padding(8.dp),
-                                    style = MaterialTheme.typography.bodyMedium
-                                )
+                                Column(modifier = Modifier.padding(8.dp)) {
+                                    Text(
+                                        text = msg.content,
+                                        style = MaterialTheme.typography.bodyMedium
+                                    )
+                                    if (msg.snapshot != null && msg.snapshot.isNotEmpty()) {
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                        ) {
+                                            Text(
+                                                text = "📦 Snapshot (${msg.snapshot.size} files)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.secondary
+                                            )
+                                            TextButton(
+                                                onClick = {
+                                                    val json = viewModel.getSnapshotJson(msg.snapshot)
+                                                    clipboardManager.setText(AnnotatedString(json))
+                                                    Toast.makeText(context, "Snapshot JSON copied", Toast.LENGTH_SHORT).show()
+                                                },
+                                                contentPadding = PaddingValues(4.dp)
+                                            ) {
+                                                Text("Export", style = MaterialTheme.typography.labelSmall)
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    if (project.activeSession != null) {
+                                                        viewModel.deleteSnapshot(project.id, project.activeSession!!.id, index)
+                                                        Toast.makeText(context, "Snapshot deleted", Toast.LENGTH_SHORT).show()
+                                                    }
+                                                },
+                                                contentPadding = PaddingValues(4.dp)
+                                            ) {
+                                                Text("Delete", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

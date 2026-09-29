@@ -709,4 +709,37 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         val modelName = model ?: _selectedModel.value
         return if (modelName.contains("pro", ignoreCase = true)) 2097152 else 1048576
     }
+
+    fun deleteSnapshot(projectId: String, sessionId: String, messageIndex: Int) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val activeSession = project.chatSessions.find { it.id == sessionId } ?: return
+        
+        val updatedMessages = activeSession.messages.mapIndexed { idx, msg ->
+            if (idx == messageIndex) {
+                msg.copy(snapshot = null)
+            } else {
+                msg
+            }
+        }
+        
+        val updatedSession = activeSession.copy(messages = updatedMessages)
+        val updatedSessions = project.chatSessions.map { if (it.id == sessionId) updatedSession else it }
+        val updatedProject = project.copy(chatSessions = updatedSessions)
+        
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
+    fun getSnapshotJson(snapshot: List<PwaFile>): String {
+        val json = JSONObject()
+        val filesArray = JSONArray()
+        snapshot.forEach { file ->
+            filesArray.put(JSONObject().apply {
+                put("name", file.name)
+                put("content", file.content)
+            })
+        }
+        json.put("files", filesArray)
+        return json.toString(2)
+    }
 }
