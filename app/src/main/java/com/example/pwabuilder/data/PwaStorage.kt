@@ -251,7 +251,8 @@ Format each file as follows:
 content
 --- END ---
 
-Include index.html, styles.css, script.js, and manifest.json at minimum.
+Include index.html, styles.css, script.js, manifest.json, and an SVG format app icon file (e.g. icon.svg).
+Make sure manifest.json references this SVG icon so that the PWA is fully installable.
         """.trimIndent()
     }
 
