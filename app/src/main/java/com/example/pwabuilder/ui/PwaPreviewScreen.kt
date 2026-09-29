@@ -3,9 +3,11 @@ package com.example.pwabuilder.ui
 import android.annotation.SuppressLint
 import android.app.AlertDialog
 import android.view.ViewGroup
+import android.webkit.ConsoleMessage
 import android.webkit.JsPromptResult
 import android.webkit.JsResult
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
@@ -106,6 +108,7 @@ fun PwaPreviewScreen(
     var webViewInstance by remember { mutableStateOf<WebView?>(null) }
     
     var showChat by remember { mutableStateOf(false) }
+    var previewError by remember { mutableStateOf<String?>(null) }
     var chatInputText by remember { mutableStateOf("") }
     var chatSelectedImagePaths by remember { mutableStateOf<List<String>>(emptyList()) }
     var showMenu by remember { mutableStateOf(false) }
@@ -245,8 +248,15 @@ fun PwaPreviewScreen(
                             allowContentAccess = true
                         }
 
-                        webViewClient = PwaWebViewClient(projectDir)
+                        webViewClient = PwaWebViewClient(projectDir) { previewError = it }
                         webChromeClient = object : WebChromeClient() {
+                            override fun onConsoleMessage(consoleMessage: ConsoleMessage?): Boolean {
+                                if (consoleMessage?.messageLevel() == ConsoleMessage.MessageLevel.ERROR) {
+                                    previewError = "JS Error: ${consoleMessage.message()} (Line ${consoleMessage.lineNumber()})"
+                                }
+                                return super.onConsoleMessage(consoleMessage)
+                            }
+
                             override fun onJsConfirm(view: WebView?, url: String?, message: String?, result: JsResult?): Boolean {
                                 AlertDialog.Builder(context)
                                     .setTitle("Feature Not Available in Preview")
@@ -274,6 +284,40 @@ fun PwaPreviewScreen(
                 modifier = Modifier.fillMaxSize(),
                 update = { }
             )
+
+            if (previewError != null) {
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp)
+                        .align(Alignment.TopCenter),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Preview Runtime Error",
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = previewError!!,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        TextButton(onClick = { previewError = null }) {
+                            Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
+                        }
+                    }
+                }
+            }
 
             if (isGenerating) {
                 Box(
@@ -793,7 +837,10 @@ fun ChatInterface(
     }
 }
 
-class PwaWebViewClient(private val projectDir: File) : WebViewClient() {
+class PwaWebViewClient(
+    private val projectDir: File,
+    private val onError: (String) -> Unit
+) : WebViewClient() {
     override fun shouldInterceptRequest(
         view: WebView?,
         request: WebResourceRequest?
@@ -815,9 +862,37 @@ class PwaWebViewClient(private val projectDir: File) : WebViewClient() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                 }
+            } else {
+                onError("Resource not found: $path")
             }
         }
         return super.shouldInterceptRequest(view, request)
+    }
+
+    override fun onReceivedError(
+        view: WebView?,
+        request: WebResourceRequest?,
+        error: WebResourceError?
+    ) {
+        super.onReceivedError(view, request, error)
+        if (request?.isForMainFrame == true) {
+            val description = error?.description?.toString() ?: "Unknown error"
+            val errorCode = error?.errorCode ?: 0
+            onError("Page Load Error ($errorCode): $description")
+        }
+    }
+
+    override fun onReceivedHttpError(
+        view: WebView?,
+        request: WebResourceRequest?,
+        errorResponse: WebResourceResponse?
+    ) {
+        super.onReceivedHttpError(view, request, errorResponse)
+        if (request?.isForMainFrame == true) {
+            val statusCode = errorResponse?.statusCode ?: 0
+            val reason = errorResponse?.reasonPhrase ?: "Unknown"
+            onError("HTTP Error $statusCode: $reason")
+        }
     }
 
     private fun getMimeType(fileName: String): String {
