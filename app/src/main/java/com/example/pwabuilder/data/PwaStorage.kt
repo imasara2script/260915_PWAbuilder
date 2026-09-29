@@ -299,4 +299,13 @@ Also, include a visible version number or update timestamp in the UI (e.g. in th
             else -> String.format(Locale.getDefault(), "%.2f MB", size / (1024.0 * 1024.0))
         }
     }
+
+    fun saveModelRpd(modelName: String, rpd: Int) {
+        prefs.edit().putInt("model_rpd_$modelName", rpd).apply()
+    }
+
+    fun getModelRpd(modelName: String): Int {
+        val defaultRpd = if (modelName.contains("pro", ignoreCase = true)) 0 else 1500
+        return prefs.getInt("model_rpd_$modelName", defaultRpd)
+    }
 }

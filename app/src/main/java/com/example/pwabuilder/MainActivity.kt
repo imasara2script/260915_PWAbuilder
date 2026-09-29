@@ -12,6 +12,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
@@ -41,9 +43,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.material3.Surface
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -224,6 +228,13 @@ class MainActivity : ComponentActivity() {
                                 metadata = ListDetailSceneStrategy.detailPane()
                             ) {
                                 SettingsScreen(
+                                    onBack = { backStack.removeLastOrNull() }
+                                )
+                            }
+                            entry<PwaDestinations.ModelSettings>(
+                                metadata = ListDetailSceneStrategy.detailPane()
+                            ) {
+                                ModelSettingsScreen(
                                     onBack = { backStack.removeLastOrNull() }
                                 )
                             }
@@ -454,6 +465,7 @@ fun ProjectSettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             OutlinedTextField(
                 value = projectName,
@@ -854,6 +866,7 @@ fun SettingsScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .padding(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
             val uriHandler = LocalUriHandler.current
 
@@ -1008,6 +1021,14 @@ fun SettingsScreen(
                         )
                     }
                 }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = { viewModel.navigateTo(PwaDestinations.ModelSettings) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Configure AI Models & RPD Limits")
             }
         }
     }
@@ -1180,6 +1201,144 @@ fun ProjectItem(project: PwaProject, onPreviewClick: () -> Unit, onSettingsClick
         }
         Button(onClick = onPreviewClick) {
             Text("Preview")
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ModelSettingsScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val viewModel = LocalPwaViewModel.current
+    val context = LocalContext.current
+    val modelList by viewModel.allAvailableModels.collectAsState()
+    val isFetchingModels by viewModel.isFetchingModels.collectAsState()
+
+    var searchQuery by remember { mutableStateOf("") }
+
+    LaunchedEffect(Unit) {
+        viewModel.fetchModels()
+    }
+
+    val rpdValues = remember(modelList) {
+        mutableStateMapOf<String, String>().apply {
+            modelList.forEach { modelName ->
+                put(modelName, viewModel.getModelRpd(modelName).toString())
+            }
+        }
+    }
+
+    val filteredModels = remember(modelList, searchQuery) {
+        if (searchQuery.isBlank()) {
+            modelList
+        } else {
+            modelList.filter { it.contains(searchQuery.trim(), ignoreCase = true) }
+        }
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize(),
+        topBar = {
+            TopAppBar(
+                title = { Text("AI Model Settings (RPD)") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        },
+        bottomBar = {
+            Surface(
+                tonalElevation = 3.dp,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Box(modifier = Modifier.padding(16.dp)) {
+                    Button(
+                        onClick = {
+                            val map = rpdValues.mapValues { entry ->
+                                entry.value.toIntOrNull() ?: 0
+                            }
+                            viewModel.saveAllModelRpds(map)
+                            Toast.makeText(context, "All RPD settings saved successfully!", Toast.LENGTH_SHORT).show()
+                            onBack()
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Save All RPD Settings")
+                    }
+                }
+            }
+        }
+    ) { innerPadding ->
+        LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+        ) {
+            item {
+                Text(
+                    text = "Set Requests Per Day (RPD) limit for each model. Models containing 'pro' default to 0. Models set to 0 or left blank will be hidden from selection lists.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.secondary
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = searchQuery,
+                    onValueChange = { searchQuery = it },
+                    label = { Text("Search models...") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true,
+                    trailingIcon = {
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(onClick = { searchQuery = "" }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Clear search")
+                            }
+                        }
+                    }
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                if (isFetchingModels) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Fetching available models from API...", style = MaterialTheme.typography.bodySmall)
+                    }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+            }
+
+            items(filteredModels) { modelName ->
+                if (!rpdValues.containsKey(modelName)) {
+                    rpdValues[modelName] = viewModel.getModelRpd(modelName).toString()
+                }
+                val currentText = rpdValues[modelName] ?: viewModel.getModelRpd(modelName).toString()
+
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(text = modelName, style = MaterialTheme.typography.titleMedium)
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = currentText,
+                            onValueChange = { rpdValues[modelName] = it },
+                            label = { Text("Requests Per Day (RPD)") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                }
+            }
         }
     }
 }

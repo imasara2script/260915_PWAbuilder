@@ -14,6 +14,9 @@ sealed interface PwaDestinations : NavKey {
     data object Settings : PwaDestinations
 
     @Serializable
+    data object ModelSettings : PwaDestinations
+
+    @Serializable
     data object ImportProject : PwaDestinations
 
     @Serializable

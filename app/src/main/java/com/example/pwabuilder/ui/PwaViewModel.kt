@@ -26,6 +26,9 @@ import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
@@ -77,8 +80,29 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         storage.saveGenerationPromptTemplate(template)
     }
 
+    private val _modelRpdVersion = MutableStateFlow(0)
+
     private val _availableModels = MutableStateFlow<List<String>>(listOf("gemini-1.5-flash", "gemini-1.5-pro"))
-    val availableModels: StateFlow<List<String>> = _availableModels
+    val allAvailableModels: StateFlow<List<String>> = _availableModels
+    val availableModels: StateFlow<List<String>> = combine(_availableModels, _modelRpdVersion) { models, _ ->
+        models.filter { storage.getModelRpd(it) > 0 }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, listOf("gemini-1.5-flash", "gemini-1.5-pro"))
+
+    fun getModelRpd(modelName: String): Int {
+        return storage.getModelRpd(modelName)
+    }
+
+    fun saveModelRpd(modelName: String, rpd: Int) {
+        storage.saveModelRpd(modelName, rpd)
+        _modelRpdVersion.value = _modelRpdVersion.value + 1
+    }
+
+    fun saveAllModelRpds(rpdMap: Map<String, Int>) {
+        rpdMap.forEach { (modelName, rpd) ->
+            storage.saveModelRpd(modelName, rpd)
+        }
+        _modelRpdVersion.value = _modelRpdVersion.value + 1
+    }
 
     private val _selectedModel = MutableStateFlow("gemini-1.5-flash")
     val selectedModel: StateFlow<String> = _selectedModel
