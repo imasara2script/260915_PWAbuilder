@@ -240,6 +240,29 @@ class PwaStorage(private val context: Context) {
                 name.endsWith(".gif", ignoreCase = true)
     }
 
+    companion object {
+        val DEFAULT_GENERATION_PROMPT_TEMPLATE = """
+Generate a PWA (Progressive Web App) based on the following description:
+{prompt}
+
+Please provide the output as a list of files with their contents.
+Format each file as follows:
+--- FILE: filename ---
+content
+--- END ---
+
+Include index.html, styles.css, script.js, and manifest.json at minimum.
+        """.trimIndent()
+    }
+
+    fun saveGenerationPromptTemplate(template: String) {
+        prefs.edit().putString("generation_prompt_template", template).apply()
+    }
+
+    fun getGenerationPromptTemplate(): String {
+        return prefs.getString("generation_prompt_template", DEFAULT_GENERATION_PROMPT_TEMPLATE) ?: DEFAULT_GENERATION_PROMPT_TEMPLATE
+    }
+
     fun deleteProject(id: String) {
         val projectDir = File(projectsDir, id)
         projectDir.deleteRecursively()

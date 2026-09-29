@@ -69,6 +69,14 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
     private val _githubToken = MutableStateFlow("")
     val githubToken: StateFlow<String> = _githubToken
 
+    private val _generationPromptTemplate = MutableStateFlow(storage.getGenerationPromptTemplate())
+    val generationPromptTemplate: StateFlow<String> = _generationPromptTemplate
+
+    fun updateGenerationPromptTemplate(template: String) {
+        _generationPromptTemplate.value = template
+        storage.saveGenerationPromptTemplate(template)
+    }
+
     private val _availableModels = MutableStateFlow<List<String>>(listOf("gemini-1.5-flash", "gemini-1.5-pro"))
     val availableModels: StateFlow<List<String>> = _availableModels
 
@@ -414,7 +422,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _lastError.value = null
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
-                val result = geminiService.generatePwa(_apiKey.value, _selectedModel.value, prompt, files)
+                val result = geminiService.generatePwa(_apiKey.value, _selectedModel.value, prompt, files, _generationPromptTemplate.value)
                 val response = result.text
                 if (response.isBlank()) {
                     val errorMsg = "Empty response from AI. Please check your prompt and API key."

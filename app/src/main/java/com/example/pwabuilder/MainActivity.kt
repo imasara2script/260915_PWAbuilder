@@ -896,6 +896,37 @@ fun SettingsScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
+            Text("AI Generation Prompt Template", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Customize the prompt template sent to Gemini. Use {prompt} where your input description will be inserted.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.secondary
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+
+            val promptTemplate by viewModel.generationPromptTemplate.collectAsState()
+            var editableTemplate by remember(promptTemplate) { mutableStateOf(promptTemplate) }
+
+            OutlinedTextField(
+                value = editableTemplate,
+                onValueChange = { editableTemplate = it },
+                label = { Text("Prompt Template") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(160.dp),
+                textStyle = MaterialTheme.typography.bodySmall
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = { viewModel.updateGenerationPromptTemplate(editableTemplate) },
+                enabled = editableTemplate.isNotBlank() && editableTemplate != promptTemplate,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Prompt Template")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
             Text("Default Configuration", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.height(8.dp))
 

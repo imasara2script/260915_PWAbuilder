@@ -43,15 +43,21 @@ class GeminiService {
         }
     }
     
-    suspend fun generatePwa(apiKey: String, modelName: String, prompt: String, imageFiles: List<File> = emptyList()): PwaGenerationResult {
+    suspend fun generatePwa(
+        apiKey: String,
+        modelName: String,
+        prompt: String,
+        imageFiles: List<File> = emptyList(),
+        promptTemplate: String? = null
+    ): PwaGenerationResult {
         val generativeModel = GenerativeModel(
             modelName = modelName,
             apiKey = apiKey
         )
 
-        val fullPrompt = """
+        val template = promptTemplate ?: """
             Generate a PWA (Progressive Web App) based on the following description:
-            $prompt
+            {prompt}
             
             Please provide the output as a list of files with their contents.
             Format each file as follows:
@@ -61,6 +67,12 @@ class GeminiService {
             
             Include index.html, styles.css, script.js, and manifest.json at minimum.
         """.trimIndent()
+
+        val fullPrompt = if (template.contains("{prompt}")) {
+            template.replace("{prompt}", prompt)
+        } else {
+            "$template\n\n$prompt"
+        }
 
         val response = if (imageFiles.isEmpty()) {
             generativeModel.generateContent(fullPrompt)
