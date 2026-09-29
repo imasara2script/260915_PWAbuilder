@@ -474,6 +474,22 @@ fun ProjectSettingsScreen(
 
             Spacer(modifier = Modifier.height(16.dp))
 
+            val storageSize = remember(project.id) { viewModel.getProjectStorageSizeFormatted(project.id) }
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+            ) {
+                Row(
+                    modifier = Modifier.padding(16.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Storage Usage:", style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
+                    Text(storageSize, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
             OutlinedTextField(
                 value = githubRepoName,
                 onValueChange = { githubRepoName = it },
@@ -1145,6 +1161,9 @@ fun AiEditorPreview() {
 
 @Composable
 fun ProjectItem(project: PwaProject, onPreviewClick: () -> Unit, onSettingsClick: () -> Unit) {
+    val viewModel = LocalPwaViewModel.current
+    val storageSize = remember(project.id) { viewModel.getProjectStorageSizeFormatted(project.id) }
+
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -1157,7 +1176,7 @@ fun ProjectItem(project: PwaProject, onPreviewClick: () -> Unit, onSettingsClick
                 .clickable { onSettingsClick() }
         ) {
             Text(text = project.name, style = MaterialTheme.typography.titleMedium)
-            Text(text = "${project.files.size} files", style = MaterialTheme.typography.bodySmall)
+            Text(text = "${project.files.size} files • Storage: $storageSize", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.secondary)
         }
         Button(onClick = onPreviewClick) {
             Text("Preview")

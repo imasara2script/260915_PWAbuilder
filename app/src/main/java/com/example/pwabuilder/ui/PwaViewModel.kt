@@ -105,6 +105,10 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
+    fun getProjectStorageSizeFormatted(projectId: String): String {
+        return storage.formatSize(storage.getProjectDirectorySize(projectId))
+    }
+
     fun renameProject(projectId: String, newName: String) {
         val project = _projects.value.find { it.id == projectId } ?: return
         val updatedProject = project.copy(name = newName)

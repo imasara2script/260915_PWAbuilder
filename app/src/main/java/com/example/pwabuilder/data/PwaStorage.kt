@@ -5,6 +5,7 @@ import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.Locale
 
 data class PwaFile(val name: String, val content: String)
 data class ChatMessage(
@@ -253,6 +254,7 @@ content
 
 Include index.html, styles.css, script.js, manifest.json, and an SVG format app icon file (e.g. icon.svg).
 Make sure manifest.json references this SVG icon so that the PWA is fully installable.
+Also, include a visible version number or update timestamp in the UI (e.g. in the footer or header) so that users can easily verify when code updates are deployed and reflected on GitHub Pages.
         """.trimIndent()
     }
 
@@ -267,5 +269,34 @@ Make sure manifest.json references this SVG icon so that the PWA is fully instal
     fun deleteProject(id: String) {
         val projectDir = File(projectsDir, id)
         projectDir.deleteRecursively()
+    }
+
+    fun getProjectDirectorySize(projectId: String): Long {
+        val projectDir = File(projectsDir, projectId)
+        if (!projectDir.exists() || !projectDir.isDirectory) return 0L
+        return getDirectorySize(projectDir)
+    }
+
+    private fun getDirectorySize(dir: File): Long {
+        var size = 0L
+        val files = dir.listFiles()
+        if (files != null) {
+            for (file in files) {
+                size += if (file.isDirectory) {
+                    getDirectorySize(file)
+                } else {
+                    file.length()
+                }
+            }
+        }
+        return size
+    }
+
+    fun formatSize(size: Long): String {
+        return when {
+            size < 1024 -> "$size B"
+            size < 1024 * 1024 -> "${size / 1024} KB"
+            else -> String.format(Locale.getDefault(), "%.2f MB", size / (1024.0 * 1024.0))
+        }
     }
 }
