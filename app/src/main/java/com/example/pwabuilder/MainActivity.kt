@@ -563,6 +563,8 @@ fun ImportProjectScreen(
 ) {
     val viewModel = LocalPwaViewModel.current
     var jsonText by remember { mutableStateOf("") }
+    var repoUrlInput by remember { mutableStateOf("") }
+    val isGenerating by viewModel.isGenerating.collectAsState()
     val context = LocalContext.current
 
     val filePickerLauncher = rememberLauncherForActivityResult(
@@ -607,6 +609,35 @@ fun ImportProjectScreen(
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            Text("Import from GitHub Repository", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
+            OutlinedTextField(
+                value = repoUrlInput,
+                onValueChange = { repoUrlInput = it },
+                label = { Text("GitHub Repo URL or owner/repo") },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("e.g. username/my-pwa or https://github.com/username/my-pwa") }
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Button(
+                onClick = {
+                    if (repoUrlInput.isNotBlank()) {
+                        viewModel.importProjectFromGitHub(repoUrlInput)
+                    }
+                },
+                enabled = repoUrlInput.isNotBlank() && !isGenerating,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text(if (isGenerating) "Importing..." else "Import from GitHub")
+            }
+
+            Spacer(modifier = Modifier.height(24.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(24.dp))
+
+            Text("Import from JSON", style = MaterialTheme.typography.titleMedium, modifier = Modifier.fillMaxWidth())
+            Spacer(modifier = Modifier.height(8.dp))
+
             Button(
                 onClick = { filePickerLauncher.launch("application/json") },
                 modifier = Modifier.fillMaxWidth()
@@ -638,10 +669,10 @@ fun ImportProjectScreen(
                         viewModel.importProjectFromJson(jsonText)
                     }
                 },
-                enabled = jsonText.isNotBlank(),
+                enabled = jsonText.isNotBlank() && !isGenerating,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Text("Import Project")
+                Text("Import Project from JSON")
             }
         }
     }

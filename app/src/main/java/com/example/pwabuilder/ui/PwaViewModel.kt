@@ -391,6 +391,61 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         }
     }
 
+    fun importProjectFromGitHub(repoInput: String, projectName: String? = null) {
+        viewModelScope.launch {
+            _isGenerating.value = true
+            _lastError.value = null
+            try {
+                val clean = repoInput.trim().removeSuffix(".git")
+                val parts = when {
+                    clean.startsWith("https://github.com/") -> clean.removePrefix("https://github.com/")
+                    clean.startsWith("github.com/") -> clean.removePrefix("github.com/")
+                    else -> clean
+                }.split("/").filter { it.isNotBlank() }
+
+                if (parts.size < 2) {
+                    val err = "Invalid GitHub repository format. Use 'owner/repo' or 'https://github.com/owner/repo'."
+                    _lastError.value = err
+                    _errorEvents.emit(err)
+                    _isGenerating.value = false
+                    return@launch
+                }
+
+                val owner = parts[0]
+                val repo = parts[1]
+
+                val result = githubService.downloadRepositoryZip(_githubToken.value, owner, repo)
+                if (result.isSuccess) {
+                    val files = result.getOrNull()!!
+                    val name = projectName?.takeIf { it.isNotBlank() } ?: repo
+                    
+                    val project = PwaProject(
+                        id = UUID.randomUUID().toString(),
+                        name = name,
+                        files = files,
+                        chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Imported from GitHub", emptyList())),
+                        activeSessionId = null,
+                        githubRepoName = repo
+                    )
+                    storage.saveProject(project)
+                    loadProjects()
+                    _successEvents.emit(Unit)
+                } else {
+                    val err = "Failed to import from GitHub: ${result.exceptionOrNull()?.message}"
+                    _lastError.value = err
+                    _errorEvents.emit(err)
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                val err = "Import error: ${e.message}"
+                _lastError.value = err
+                _errorEvents.emit(err)
+            } finally {
+                _isGenerating.value = false
+            }
+        }
+    }
+
     fun addSharedImageToProject(projectId: String, imagePath: String, fileName: String) {
         val project = _projects.value.find { it.id == projectId } ?: return
         val imageFile = File(imagePath)

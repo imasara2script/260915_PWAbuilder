@@ -1,5 +1,6 @@
 package com.example.pwabuilder.data
 
+import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
@@ -9,6 +10,7 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONArray
 import org.json.JSONObject
+import java.util.zip.ZipInputStream
 
 class GitHubService {
     private val client = OkHttpClient()
@@ -179,5 +181,75 @@ class GitHubService {
             delay(10000) // 10 seconds delay
         }
         false
+    }
+
+    suspend fun downloadRepositoryZip(
+        token: String,
+        owner: String,
+        repo: String
+    ): Result<List<PwaFile>> = withContext(Dispatchers.IO) {
+        try {
+            var zipBytes: ByteArray? = null
+            for (branch in listOf("main", "master")) {
+                val url = "https://api.github.com/repos/$owner/$repo/zipball/$branch"
+                val requestBuilder = Request.Builder().url(url)
+                    .header("Accept", "application/vnd.github.v3+json")
+                if (token.isNotBlank()) {
+                    requestBuilder.header("Authorization", "token $token")
+                }
+                client.newCall(requestBuilder.build()).execute().use { response ->
+                    if (response.isSuccessful) {
+                        zipBytes = response.body?.bytes()
+                    }
+                }
+                if (zipBytes != null) break
+            }
+
+            if (zipBytes == null) {
+                return@withContext Result.failure(Exception("Failed to download repository zip. Please check the repository URL and PAT (if private)."))
+            }
+
+            val files = mutableListOf<PwaFile>()
+            ZipInputStream(zipBytes!!.inputStream()).use { zis ->
+                var entry = zis.nextEntry
+                while (entry != null) {
+                    if (!entry.isDirectory) {
+                        val fullName = entry.name
+                        val slashIndex = fullName.indexOf('/')
+                        val relativePath = if (slashIndex != -1) fullName.substring(slashIndex + 1) else fullName
+                        
+                        if (relativePath.isNotEmpty() && !relativePath.startsWith(".git")) {
+                            val bytes = zis.readBytes()
+                            val content = if (isBinaryFile(relativePath)) {
+                                Base64.encodeToString(bytes, Base64.DEFAULT)
+                            } else {
+                                String(bytes, Charsets.UTF_8)
+                            }
+                            files.add(PwaFile(relativePath, content))
+                        }
+                    }
+                    zis.closeEntry()
+                    entry = zis.nextEntry
+                }
+            }
+
+            if (files.isEmpty()) {
+                return@withContext Result.failure(Exception("The repository is empty or could not be parsed."))
+            }
+
+            Result.success(files)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    private fun isBinaryFile(name: String): Boolean {
+        return name.endsWith(".png", ignoreCase = true) ||
+                name.endsWith(".jpg", ignoreCase = true) ||
+                name.endsWith(".jpeg", ignoreCase = true) ||
+                name.endsWith(".gif", ignoreCase = true) ||
+                name.endsWith(".ico", ignoreCase = true) ||
+                name.endsWith(".webp", ignoreCase = true)
     }
 }
