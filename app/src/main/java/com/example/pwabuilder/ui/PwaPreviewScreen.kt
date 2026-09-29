@@ -660,6 +660,18 @@ fun ChatInterface(
             }
         }
 
+        val todayUsage = viewModel.getTodayModelUsage(currentSessionModel)
+        val rpdLimit = viewModel.getModelRpd(currentSessionModel)
+        Column(modifier = Modifier.padding(vertical = 2.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = "Model RPD ($currentSessionModel): $todayUsage / $rpdLimit used today",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = if (todayUsage >= rpdLimit && rpdLimit > 0) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.secondary
+                )
+            }
+        }
+
         Spacer(modifier = Modifier.height(8.dp))
         
         if (showHistory) {

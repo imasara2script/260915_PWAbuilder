@@ -92,6 +92,10 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         return storage.getModelRpd(modelName)
     }
 
+    fun getTodayModelUsage(modelName: String): Int {
+        return storage.getTodayModelUsage(modelName)
+    }
+
     fun saveModelRpd(modelName: String, rpd: Int) {
         storage.saveModelRpd(modelName, rpd)
         _modelRpdVersion.value = _modelRpdVersion.value + 1
@@ -505,6 +509,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _lastError.value = null
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
+                storage.incrementModelUsage(_selectedModel.value)
                 val result = geminiService.generatePwa(_apiKey.value, _selectedModel.value, prompt, files, _generationPromptTemplate.value)
                 val response = result.text
                 if (response.isBlank()) {
@@ -688,6 +693,7 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _lastError.value = null
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
+                storage.incrementModelUsage(modelToUse)
                 val result = geminiService.refinePwa(_apiKey.value, modelToUse, project, activeSession.messages, instruction, files)
                 val response = result.text
                 if (response.isBlank()) {

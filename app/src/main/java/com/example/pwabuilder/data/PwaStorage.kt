@@ -5,6 +5,8 @@ import android.util.Base64
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.Locale
 
 data class PwaFile(val name: String, val content: String)
@@ -307,5 +309,22 @@ Also, include a visible version number or update timestamp in the UI (e.g. in th
     fun getModelRpd(modelName: String): Int {
         val defaultRpd = if (modelName.contains("pro", ignoreCase = true)) 0 else 1500
         return prefs.getInt("model_rpd_$modelName", defaultRpd)
+    }
+
+    private fun getTodayString(): String {
+        return SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    }
+
+    fun incrementModelUsage(modelName: String) {
+        val today = getTodayString()
+        val key = "model_usage_${modelName}_$today"
+        val current = prefs.getInt(key, 0)
+        prefs.edit().putInt(key, current + 1).apply()
+    }
+
+    fun getTodayModelUsage(modelName: String): Int {
+        val today = getTodayString()
+        val key = "model_usage_${modelName}_$today"
+        return prefs.getInt(key, 0)
     }
 }
