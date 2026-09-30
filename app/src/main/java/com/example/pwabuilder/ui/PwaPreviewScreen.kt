@@ -169,6 +169,15 @@ fun PwaPreviewScreen(
                                 leadingIcon = { Icon(Icons.Rounded.Refresh, contentDescription = null) }
                             )
                             DropdownMenuItem(
+                                text = { Text("Revert to Latest Version") },
+                                onClick = {
+                                    viewModel.restoreLatestSnapshot(project.id)
+                                    Toast.makeText(context, "Reverted to latest version", Toast.LENGTH_SHORT).show()
+                                    showMenu = false
+                                },
+                                leadingIcon = { Icon(Icons.Rounded.Refresh, contentDescription = null) }
+                            )
+                            DropdownMenuItem(
                                 text = { Text("Add to Home Screen") },
                                 onClick = {
                                     viewModel.installPwaShortcut(context, project)
@@ -796,6 +805,12 @@ fun ChatInterface(
                                             )
                                             Row {
                                                 TextButton(onClick = {
+                                                    viewModel.restoreSnapshotToProject(project.id, msg.snapshot)
+                                                    Toast.makeText(context, "Restored snapshot! Swipe down to preview.", Toast.LENGTH_LONG).show()
+                                                }) {
+                                                    Text("Preview", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                                }
+                                                TextButton(onClick = {
                                                     val json = viewModel.getSnapshotJson(msg.snapshot)
                                                     clipboardManager.setText(AnnotatedString(json))
                                                     Toast.makeText(context, "Snapshot JSON copied", Toast.LENGTH_SHORT).show()
@@ -850,6 +865,15 @@ fun ChatInterface(
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.secondary
                                             )
+                                            TextButton(
+                                                onClick = {
+                                                    viewModel.restoreSnapshotToProject(project.id, msg.snapshot)
+                                                    Toast.makeText(context, "Restored snapshot! Swipe down to preview.", Toast.LENGTH_LONG).show()
+                                                },
+                                                contentPadding = PaddingValues(4.dp)
+                                            ) {
+                                                Text("Preview", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                                            }
                                             TextButton(
                                                 onClick = {
                                                     val json = viewModel.getSnapshotJson(msg.snapshot)

@@ -797,4 +797,22 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 name.endsWith(".ico", ignoreCase = true) ||
                 name.endsWith(".webp", ignoreCase = true)
     }
+
+    fun restoreSnapshotToProject(projectId: String, snapshot: List<PwaFile>) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedProject = project.copy(files = snapshot)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
+    fun restoreLatestSnapshot(projectId: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val activeSession = project.activeSession ?: return
+        val latestSnapshot = activeSession.messages.lastOrNull { it.snapshot != null }?.snapshot
+        if (latestSnapshot != null) {
+            val updatedProject = project.copy(files = latestSnapshot)
+            storage.saveProject(updatedProject)
+            loadProjects()
+        }
+    }
 }
