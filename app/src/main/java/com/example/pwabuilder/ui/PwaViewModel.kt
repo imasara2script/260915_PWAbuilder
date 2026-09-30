@@ -772,4 +772,29 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         json.put("files", filesArray)
         return json.toString(2)
     }
+
+    fun getSnapshotSizeFormatted(snapshot: List<PwaFile>): String {
+        var totalBytes = 0L
+        snapshot.forEach { file ->
+            totalBytes += try {
+                if (isImageFile(file.name)) {
+                    Base64.decode(file.content, Base64.DEFAULT).size.toLong()
+                } else {
+                    file.content.toByteArray(Charsets.UTF_8).size.toLong()
+                }
+            } catch (e: Exception) {
+                file.content.length.toLong()
+            }
+        }
+        return storage.formatSize(totalBytes)
+    }
+
+    private fun isImageFile(name: String): Boolean {
+        return name.endsWith(".png", ignoreCase = true) ||
+                name.endsWith(".jpg", ignoreCase = true) ||
+                name.endsWith(".jpeg", ignoreCase = true) ||
+                name.endsWith(".gif", ignoreCase = true) ||
+                name.endsWith(".ico", ignoreCase = true) ||
+                name.endsWith(".webp", ignoreCase = true)
+    }
 }

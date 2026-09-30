@@ -790,7 +790,7 @@ fun ChatInterface(
                                             verticalAlignment = Alignment.CenterVertically
                                         ) {
                                             Text(
-                                                text = "Snapshot: ${msg.snapshot.size} files",
+                                                text = "Snapshot: ${msg.snapshot.size} files (${viewModel.getSnapshotSizeFormatted(msg.snapshot)})",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
@@ -846,7 +846,7 @@ fun ChatInterface(
                                             horizontalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
                                             Text(
-                                                text = "📦 Snapshot (${msg.snapshot.size} files)",
+                                                text = "📦 Snapshot (${msg.snapshot.size} files, ${viewModel.getSnapshotSizeFormatted(msg.snapshot)})",
                                                 style = MaterialTheme.typography.labelSmall,
                                                 color = MaterialTheme.colorScheme.secondary
                                             )
