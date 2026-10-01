@@ -399,9 +399,9 @@ fun PwaPreviewScreen(
                         }
                     }
                 },
-                onReset = { index, instruction ->
+                onReset = { index, instruction, branch ->
                     if (project.activeSession != null) {
-                        viewModel.resetToMessage(project.id, project.activeSession!!.id, index, instruction)
+                        viewModel.resetToMessage(project.id, project.activeSession!!.id, index, instruction, branch)
                         scope.launch { sheetState.hide() }.invokeOnCompletion {
                             if (!sheetState.isVisible) {
                                 showChat = false
@@ -531,7 +531,7 @@ fun ChatInterface(
     selectedImagePaths: List<String>,
     onSelectedImagePathsChanged: (List<String>) -> Unit,
     onSend: (String, List<String>) -> Unit,
-    onReset: (Int, String) -> Unit
+    onReset: (Int, String, Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val viewModel = LocalPwaViewModel.current
@@ -644,6 +644,32 @@ fun ChatInterface(
                     Text("Import")
                 }
             }
+        }
+
+        val chatError by viewModel.chatError.collectAsState()
+        if (chatError != null) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 4.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer)
+            ) {
+                Row(
+                    modifier = Modifier.padding(12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = chatError!!,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onErrorContainer,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TextButton(onClick = { viewModel.clearChatError() }) {
+                        Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
         }
 
         if (activeSession != null && activeSession.lastTokenCount > 0) {
@@ -829,11 +855,38 @@ fun ChatInterface(
                                         }
                                     }
 
+                                    var showBranchDialog by remember { mutableStateOf(false) }
+
+                                    if (showBranchDialog) {
+                                        androidx.compose.material3.AlertDialog(
+                                            onDismissRequest = { showBranchDialog = false },
+                                            title = { Text("Edit & Send Instruction") },
+                                            text = { Text("How would you like to handle chat history after this message?") },
+                                            confirmButton = {
+                                                TextButton(onClick = {
+                                                    onReset(index, editText, true)
+                                                    showBranchDialog = false
+                                                    isEditing = false
+                                                }) {
+                                                    Text("Branch as New Chat")
+                                                }
+                                            },
+                                            dismissButton = {
+                                                TextButton(onClick = {
+                                                    onReset(index, editText, false)
+                                                    showBranchDialog = false
+                                                    isEditing = false
+                                                }) {
+                                                    Text("Overwrite (Truncate)")
+                                                }
+                                            }
+                                        )
+                                    }
+
                                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                                         TextButton(onClick = { isEditing = false }) { Text("Cancel") }
                                         TextButton(onClick = { 
-                                            onReset(index, editText)
-                                            isEditing = false
+                                            showBranchDialog = true
                                         }) { Text("Reset from here", color = MaterialTheme.colorScheme.error) }
                                     }
                                 }

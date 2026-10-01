@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.launch
@@ -53,6 +54,20 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
 
     private val _lastError = MutableStateFlow<String?>(null)
     val lastError: StateFlow<String?> = _lastError
+
+    val chatError: StateFlow<String?> = _projects.map { projects ->
+        projects.firstNotNullOfOrNull { proj -> proj.activeSession?.errorMessage }
+    }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun clearChatError() {
+        val project = _projects.value.find { proj -> proj.activeSession?.errorMessage != null } ?: return
+        val activeSession = project.activeSession ?: return
+        val updatedSession = activeSession.copy(errorMessage = null)
+        val updatedSessions = project.chatSessions.map { if (it.id == activeSession.id) updatedSession else it }
+        val updatedProject = project.copy(chatSessions = updatedSessions)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
 
     private val _errorEvents = MutableSharedFlow<String>()
     val errorEvents: SharedFlow<String> = _errorEvents.asSharedFlow()
@@ -203,8 +218,14 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             val repoName = project.githubRepoName?.takeIf { it.isNotBlank() } 
                 ?: project.name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)
             
-            val result = githubService.uploadToGitHub(_githubToken.value, repoName, project.files)
+            val allowOverwrite = project.githubRepoName != null
+            val result = githubService.uploadToGitHub(_githubToken.value, repoName, project.files, allowOverwrite)
             if (result.isSuccess) {
+                if (project.githubRepoName == null) {
+                    val updatedProject = project.copy(githubRepoName = repoName)
+                    storage.saveProject(updatedProject)
+                    loadProjects()
+                }
                 val url = result.getOrNull()!!
                 _uploadStatus.value = "Waiting for GitHub Pages deployment (this may take 1-3 mins)..."
                 Toast.makeText(context, "Uploaded to GitHub! Waiting for Pages deployment...", Toast.LENGTH_LONG).show()
@@ -625,7 +646,18 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         }
     }
 
-    fun resetToMessage(projectId: String, sessionId: String, messageIndex: Int, newInstruction: String) {
+    private suspend fun appendErrorToSession(projectId: String, sessionId: String, errorText: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val session = project.chatSessions.find { it.id == sessionId } ?: return
+        val errorMsg = ChatMessage("assistant", "⚠️ Error: $errorText", null, System.currentTimeMillis())
+        val updatedSession = session.copy(messages = session.messages + errorMsg)
+        val updatedSessions = project.chatSessions.map { if (it.id == sessionId) updatedSession else it }
+        val updatedProject = project.copy(chatSessions = updatedSessions)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
+    fun resetToMessage(projectId: String, sessionId: String, messageIndex: Int, newInstruction: String, branchAsNewSession: Boolean = false) {
         viewModelScope.launch {
             val project = _projects.value.find { it.id == projectId } ?: return@launch
             val session = project.chatSessions.find { it.id == sessionId } ?: return@launch
@@ -634,8 +666,36 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             _isGenerating.value = true
             _lastError.value = null
             
+            val historyUntilThis = session.messages.take(messageIndex)
+            val preliminaryMessage = ChatMessage("user", newInstruction, null)
+
+            val targetSession: ChatSession
+            val targetSessionsList: List<ChatSession>
+
+            if (branchAsNewSession) {
+                val newSessionId = UUID.randomUUID().toString()
+                val newTitle = newInstruction.take(30) + "..."
+                targetSession = ChatSession(
+                    id = newSessionId,
+                    title = newTitle,
+                    messages = historyUntilThis + preliminaryMessage,
+                    selectedModel = session.selectedModel
+                )
+                targetSessionsList = project.chatSessions + targetSession
+            } else {
+                targetSession = session.copy(
+                    messages = historyUntilThis + preliminaryMessage,
+                    title = if (messageIndex == 0) newInstruction.take(30) + "..." else session.title,
+                    errorMessage = null
+                )
+                targetSessionsList = project.chatSessions.map { if (it.id == session.id) targetSession else it }
+            }
+
+            val projectWithUserMsg = project.copy(chatSessions = targetSessionsList, activeSessionId = targetSession.id)
+            storage.saveProject(projectWithUserMsg)
+            loadProjects()
+
             try {
-                val historyUntilThis = session.messages.take(messageIndex)
                 val baseFiles = if (messageIndex > 0) {
                     session.messages[messageIndex - 1].snapshot ?: project.files
                 } else {
@@ -652,31 +712,33 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 val response = result.text
                 val filesParsed = geminiService.parsePwaResponse(response)
                 if (filesParsed.isEmpty()) {
-                     _errorEvents.emit("Could not parse response")
+                     val errMsg = "Could not parse response"
+                     appendErrorToSession(projectId, targetSession.id, errMsg)
+                     _isGenerating.value = false
                      return@launch
                 }
 
-                val newMessage = ChatMessage("user", newInstruction, filesParsed)
-                val updatedMessages = historyUntilThis + newMessage
+                val finalMessage = preliminaryMessage.copy(snapshot = filesParsed)
+                val finalMessages = historyUntilThis + finalMessage
                 
-                val updatedSession = session.copy(
-                    messages = updatedMessages, 
-                    lastTokenCount = result.totalTokenCount,
-                    title = if (messageIndex == 0) newInstruction.take(30) + "..." else session.title
+                val updatedSession = targetSession.copy(
+                    messages = finalMessages, 
+                    lastTokenCount = result.totalTokenCount
                 )
                 
-                val updatedSessions = project.chatSessions.map { if (it.id == session.id) updatedSession else it }
-                val updatedProject = project.copy(
+                val updatedSessions = projectWithUserMsg.chatSessions.map { if (it.id == targetSession.id) updatedSession else it }
+                val updatedProject = projectWithUserMsg.copy(
                     files = filesParsed,
                     chatSessions = updatedSessions,
-                    activeSessionId = session.id
+                    activeSessionId = targetSession.id
                 )
                 storage.saveProject(updatedProject)
                 loadProjects()
                 _successEvents.emit(Unit)
             } catch (e: Exception) {
                 e.printStackTrace()
-                _errorEvents.emit("Reset failed: ${e.message}")
+                val errMsg = "Reset failed: ${e.message}"
+                appendErrorToSession(projectId, targetSession.id, errMsg)
             } finally {
                 _isGenerating.value = false
             }
@@ -691,34 +753,52 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
 
             _isGenerating.value = true
             _lastError.value = null
+
+            val userMsgContent = instruction + if (imagePaths.isNotEmpty()) " [Attached ${imagePaths.size} images]" else ""
+            val preliminaryMessage = ChatMessage("user", userMsgContent, null)
+            val sessionWithUserMsg = activeSession.copy(
+                messages = activeSession.messages + preliminaryMessage,
+                title = if (activeSession.messages.isEmpty()) instruction.take(30) + "..." else activeSession.title
+            )
+            val updatedSessionsWithUser = if (project.chatSessions.any { it.id == sessionWithUserMsg.id }) {
+                project.chatSessions.map { if (it.id == sessionWithUserMsg.id) sessionWithUserMsg else it }
+            } else {
+                project.chatSessions + sessionWithUserMsg
+            }
+            val projectWithUserMsg = project.copy(chatSessions = updatedSessionsWithUser, activeSessionId = sessionWithUserMsg.id)
+            storage.saveProject(projectWithUserMsg)
+            loadProjects()
+
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
                 storage.incrementModelUsage(modelToUse)
                 val result = geminiService.refinePwa(_apiKey.value, modelToUse, project, activeSession.messages, instruction, files)
                 val response = result.text
                 if (response.isBlank()) {
-                    _errorEvents.emit("Empty response from AI")
+                    val errMsg = "Empty response from AI"
+                    appendErrorToSession(projectId, activeSession.id, errMsg)
+                    _isGenerating.value = false
                     return@launch
                 }
 
                 val filesParsed = geminiService.parsePwaResponse(response)
                 if (filesParsed.isEmpty()) {
-                    _errorEvents.emit("Could not parse refinement response")
+                    val errMsg = "Could not parse refinement response"
+                    appendErrorToSession(projectId, activeSession.id, errMsg)
+                    _isGenerating.value = false
                     return@launch
                 }
 
-                val newMessage = ChatMessage("user", instruction + if (imagePaths.isNotEmpty()) " [Attached ${imagePaths.size} images]" else "", filesParsed)
-                val updatedMessages = activeSession.messages + newMessage
-                val updatedTitle = if (activeSession.messages.isEmpty()) instruction.take(30) + "..." else activeSession.title
+                val finalMessage = preliminaryMessage.copy(snapshot = filesParsed)
+                val finalMessages = sessionWithUserMsg.messages.dropLast(1) + finalMessage
                 
-                val updatedSession = activeSession.copy(messages = updatedMessages, title = updatedTitle, lastTokenCount = result.totalTokenCount)
-                val updatedSessions = if (project.chatSessions.any { it.id == activeSession.id }) {
-                    project.chatSessions.map { if (it.id == activeSession.id) updatedSession else it }
-                } else {
-                    project.chatSessions + updatedSession
-                }
+                val updatedSession = sessionWithUserMsg.copy(
+                    messages = finalMessages, 
+                    lastTokenCount = result.totalTokenCount
+                )
+                val updatedSessions = project.chatSessions.map { if (it.id == updatedSession.id) updatedSession else it }
                 
-                val updatedProject = project.copy(
+                val updatedProject = projectWithUserMsg.copy(
                     files = filesParsed,
                     chatSessions = updatedSessions,
                     activeSessionId = updatedSession.id
@@ -728,7 +808,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 _successEvents.emit(Unit)
             } catch (e: Exception) {
                 e.printStackTrace()
-                _errorEvents.emit("Refinement failed: ${e.message}")
+                val errMsg = "Refinement failed: ${e.message}"
+                appendErrorToSession(projectId, activeSession.id, errMsg)
             } finally {
                 _isGenerating.value = false
             }

@@ -38,7 +38,8 @@ class GitHubService {
     suspend fun uploadToGitHub(
         token: String,
         repoName: String,
-        files: List<PwaFile>
+        files: List<PwaFile>,
+        allowOverwrite: Boolean = false
     ): Result<String> = withContext(Dispatchers.IO) {
         try {
             val userResp = makeRequest(token, "https://api.github.com/user", "GET")
@@ -52,24 +53,28 @@ class GitHubService {
             // Check if repository already exists to prevent accidental overwrite
             val checkRepoUrl = "https://api.github.com/repos/$username/$repoName"
             val checkResp = makeRequest(token, checkRepoUrl, "GET")
-            if (checkResp.code == 200) {
+            val repoExists = (checkResp.code == 200)
+
+            if (repoExists && !allowOverwrite) {
                 return@withContext Result.failure(Exception("Repository '$repoName' already exists. Please specify a different repository name in project settings to avoid overwriting existing repositories."))
             }
 
-            // 1. Create Repository
-            val repoUrl = "https://api.github.com/user/repos"
-            val createRepoPayload = JSONObject().apply {
-                put("name", repoName)
-                put("auto_init", true)
-                put("private", false)
-            }
-            val createResp = makeRequest(token, repoUrl, "POST", createRepoPayload.toString())
-            if (!createResp.isSuccessful) {
-                val errBody = createResp.body ?: ""
-                if (createResp.code == 422 || errBody.contains("name already exists", ignoreCase = true)) {
-                    return@withContext Result.failure(Exception("Repository '$repoName' already exists. Please specify a different repository name in project settings."))
-                } else {
-                    return@withContext Result.failure(Exception("Failed to create repository. Details: $errBody (HTTP ${createResp.code})"))
+            if (!repoExists) {
+                // 1. Create Repository
+                val repoUrl = "https://api.github.com/user/repos"
+                val createRepoPayload = JSONObject().apply {
+                    put("name", repoName)
+                    put("auto_init", true)
+                    put("private", false)
+                }
+                val createResp = makeRequest(token, repoUrl, "POST", createRepoPayload.toString())
+                if (!createResp.isSuccessful) {
+                    val errBody = createResp.body ?: ""
+                    if (createResp.code == 422 || errBody.contains("name already exists", ignoreCase = true)) {
+                        return@withContext Result.failure(Exception("Repository '$repoName' already exists. Please specify a different repository name in project settings."))
+                    } else {
+                        return@withContext Result.failure(Exception("Failed to create repository. Details: $errBody (HTTP ${createResp.code})"))
+                    }
                 }
             }
 
