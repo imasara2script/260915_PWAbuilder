@@ -35,6 +35,24 @@ class GitHubService {
         }
     }
 
+    suspend fun checkRepositoryExists(token: String, repoName: String): Result<Boolean> = withContext(Dispatchers.IO) {
+        try {
+            if (token.isBlank()) return@withContext Result.success(false)
+            val userResp = makeRequest(token, "https://api.github.com/user", "GET")
+            if (!userResp.isSuccessful || userResp.body == null) {
+                return@withContext Result.success(false)
+            }
+            val userJson = JSONObject(userResp.body)
+            val username = userJson.getString("login")
+
+            val checkRepoUrl = "https://api.github.com/repos/$username/$repoName"
+            val checkResp = makeRequest(token, checkRepoUrl, "GET")
+            Result.success(checkResp.code == 200)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun uploadToGitHub(
         token: String,
         repoName: String,
@@ -256,5 +274,35 @@ class GitHubService {
                 name.endsWith(".gif", ignoreCase = true) ||
                 name.endsWith(".ico", ignoreCase = true) ||
                 name.endsWith(".webp", ignoreCase = true)
+    }
+
+    suspend fun renameRepository(
+        token: String,
+        oldRepo: String,
+        newRepo: String
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        try {
+            if (token.isBlank()) return@withContext Result.failure(Exception("GitHub PAT token is missing."))
+            val userResp = makeRequest(token, "https://api.github.com/user", "GET")
+            if (!userResp.isSuccessful || userResp.body == null) {
+                return@withContext Result.failure(Exception("GitHub Authentication failed."))
+            }
+            val username = JSONObject(userResp.body).getString("login")
+
+            val url = "https://api.github.com/repos/$username/$oldRepo"
+            val payload = JSONObject().apply {
+                put("name", newRepo)
+            }
+            val response = makeRequest(token, url, "PATCH", payload.toString())
+            if (response.isSuccessful) {
+                Result.success(Unit)
+            } else {
+                val err = response.body ?: "HTTP ${response.code}"
+                Result.failure(Exception("Failed to rename remote repository: $err"))
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
     }
 }

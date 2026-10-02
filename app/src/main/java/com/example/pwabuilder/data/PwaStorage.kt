@@ -32,7 +32,8 @@ data class PwaProject(
     val chatSessions: List<ChatSession> = emptyList(),
     val activeSessionId: String? = null,
     val selectedModel: String? = null,
-    val githubRepoName: String? = null
+    val githubRepoName: String? = null,
+    val allowGithubPush: Boolean = false
 ) {
     val activeSession: ChatSession?
         get() = chatSessions.find { it.id == activeSessionId } ?: chatSessions.lastOrNull()
@@ -95,6 +96,7 @@ class PwaStorage(private val context: Context) {
             put("activeSessionId", project.activeSessionId)
             put("selectedModel", project.selectedModel)
             put("githubRepoName", project.githubRepoName ?: "")
+            put("allowGithubPush", project.allowGithubPush)
         }
         File(projectDir, ".metadata").writeText(metadata.toString())
         
@@ -162,6 +164,7 @@ class PwaStorage(private val context: Context) {
         var activeSessionId: String? = null
         var selectedModel: String? = null
         var githubRepoName: String? = null
+        var allowGithubPush = false
         if (metadataFile.exists()) {
             try {
                 val json = JSONObject(metadataFile.readText())
@@ -169,6 +172,7 @@ class PwaStorage(private val context: Context) {
                 activeSessionId = json.optString("activeSessionId").takeIf { it.isNotEmpty() }
                 selectedModel = json.optString("selectedModel").takeIf { it.isNotEmpty() }
                 githubRepoName = json.optString("githubRepoName").takeIf { it.isNotEmpty() }
+                allowGithubPush = json.optBoolean("allowGithubPush", false)
             } catch (e: Exception) {
                 // Fallback for old format
                 val text = metadataFile.readText()
@@ -240,7 +244,7 @@ class PwaStorage(private val context: Context) {
                 PwaFile(file.name, file.readText())
             }
         } ?: emptyList()
-        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel, githubRepoName)
+        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel, githubRepoName, allowGithubPush)
     }
 
     private fun isImageFile(name: String): Boolean {

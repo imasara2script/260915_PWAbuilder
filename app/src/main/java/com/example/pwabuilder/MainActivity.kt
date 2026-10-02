@@ -409,6 +409,7 @@ fun ProjectSettingsScreen(
     modifier: Modifier = Modifier
 ) {
     val viewModel = LocalPwaViewModel.current
+    val context = LocalContext.current
     var showDeleteConfirm by remember { mutableStateOf(false) }
     var projectName by remember(project) { mutableStateOf(project.name) }
     var githubRepoName by remember(project) { 
@@ -512,12 +513,140 @@ fun ProjectSettingsScreen(
 
             Spacer(modifier = Modifier.height(8.dp))
 
+            var showRenameRemoteDialog by remember { mutableStateOf(false) }
+
             Button(
-                onClick = { viewModel.updateProjectGithubRepoName(project.id, githubRepoName) },
+                onClick = { 
+                    if (!project.githubRepoName.isNullOrBlank() && project.githubRepoName != githubRepoName) {
+                        showRenameRemoteDialog = true
+                    } else {
+                        viewModel.updateProjectGithubRepoName(context, project.id, githubRepoName, renameRemote = false)
+                    }
+                },
                 enabled = githubRepoName.isNotBlank() && githubRepoName != project.githubRepoName,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save GitHub Repository Name")
+            }
+
+            if (showRenameRemoteDialog) {
+                AlertDialog(
+                    onDismissRequest = { showRenameRemoteDialog = false },
+                    title = { Text("GitHubリポジトリ名の変更") },
+                    text = { Text("GitHub上のリポジトリ名も '${project.githubRepoName}' から '$githubRepoName' へ変更（リネーム）しますか？") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showRenameRemoteDialog = false
+                                viewModel.updateProjectGithubRepoName(context, project.id, githubRepoName, renameRemote = true)
+                            }
+                        ) {
+                            Text("GitHub側も変更する")
+                        }
+                    },
+                    dismissButton = {
+                        Row {
+                            TextButton(
+                                onClick = {
+                                    showRenameRemoteDialog = false
+                                    viewModel.updateProjectGithubRepoName(context, project.id, githubRepoName, renameRemote = false)
+                                }
+                            ) {
+                                Text("アプリ内のみ変更")
+                            }
+                            TextButton(onClick = { showRenameRemoteDialog = false }) {
+                                Text("キャンセル")
+                            }
+                        }
+                    }
+                )
+            }
+
+            var allowGithubPush by remember(project) { mutableStateOf(project.allowGithubPush) }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Checkbox(
+                        checked = allowGithubPush,
+                        onCheckedChange = { checked ->
+                            allowGithubPush = checked
+                            viewModel.updateProjectAllowGithubPush(project.id, checked)
+                        }
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Column {
+                        Text(
+                            text = "githubのリポジトリへのpushを許可",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                        Text(
+                            text = "オフにするとGitHubへのアップロードがブロックされます",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            var showCloneConfirmDialog by remember { mutableStateOf(false) }
+            val context = LocalContext.current
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text("Git Clone (GitHubから取得/同期)", style = MaterialTheme.typography.titleMedium)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        "プロジェクトのGitHubリポジトリ（${githubRepoName.ifBlank { "未設定" }}）から最新コードをクローン（ダウンロード）し、現在のファイルを更新します。",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Button(
+                        onClick = { showCloneConfirmDialog = true },
+                        enabled = githubRepoName.isNotBlank(),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("'${githubRepoName.ifBlank { "リポジトリ" }}' から Git Clone を実行")
+                    }
+                }
+            }
+
+            if (showCloneConfirmDialog) {
+                AlertDialog(
+                    onDismissRequest = { showCloneConfirmDialog = false },
+                    title = { Text("Git Clone の確認") },
+                    text = { Text("GitHubリポジトリ '$githubRepoName' から最新コードを取得して、現在のプロジェクトのファイルを上書き更新します。よろしいですか？") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                showCloneConfirmDialog = false
+                                viewModel.cloneRepoToProject(context, project.id, githubRepoName)
+                            }
+                        ) {
+                            Text("Git Clone 実行")
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showCloneConfirmDialog = false }) {
+                            Text("キャンセル")
+                        }
+                    }
+                )
             }
 
             Spacer(modifier = Modifier.height(24.dp))

@@ -159,9 +159,52 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         loadProjects()
     }
 
-    fun updateProjectGithubRepoName(projectId: String, repoName: String) {
+    fun updateProjectGithubRepoName(context: Context, projectId: String, repoName: String, renameRemote: Boolean = false) {
+        viewModelScope.launch {
+            val project = _projects.value.find { it.id == projectId } ?: return@launch
+            val oldRepoName = project.githubRepoName
+
+            if (renameRemote && !oldRepoName.isNullOrBlank() && oldRepoName != repoName) {
+                if (_githubToken.value.isBlank()) {
+                    val msg = "GitHub PAT token is missing. Cannot rename remote repository."
+                    _lastError.value = msg
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                _isUploading.value = true
+                val result = githubService.renameRepository(_githubToken.value, oldRepoName, repoName)
+                _isUploading.value = false
+                if (result.isFailure) {
+                    val msg = "Failed to rename GitHub repository: ${result.exceptionOrNull()?.message}"
+                    _lastError.value = msg
+                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                    return@launch
+                }
+                Toast.makeText(context, "Renamed GitHub repository successfully!", Toast.LENGTH_SHORT).show()
+            }
+
+            var allowPush = project.allowGithubPush
+            if (_githubToken.value.isNotBlank()) {
+                val exists = githubService.checkRepositoryExists(_githubToken.value, repoName).getOrDefault(false)
+                if (exists && !renameRemote) {
+                    allowPush = false
+                    val msg = "プロジェクト名が重複しているので、名前を変更するか、プロジェクト設定画面でgit pushを有効化しないとアップロードできません"
+                    _lastError.value = msg
+                    _errorEvents.emit(msg)
+                } else {
+                    allowPush = true
+                }
+            }
+            val updatedProject = project.copy(githubRepoName = repoName, allowGithubPush = allowPush)
+            storage.saveProject(updatedProject)
+            loadProjects()
+            Toast.makeText(context, "Saved GitHub Repository Name.", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun updateProjectAllowGithubPush(projectId: String, allowed: Boolean) {
         val project = _projects.value.find { it.id == projectId } ?: return
-        val updatedProject = project.copy(githubRepoName = repoName)
+        val updatedProject = project.copy(allowGithubPush = allowed)
         storage.saveProject(updatedProject)
         loadProjects()
     }
@@ -206,6 +249,10 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
 
     fun uploadToGithub(context: Context, project: PwaProject) {
         viewModelScope.launch {
+            if (!project.allowGithubPush) {
+                _lastError.value = "プロジェクト名が重複しているかGit Pushが許可されていません。名前を変更するか、プロジェクト設定画面でgit pushを有効化しないとアップロードできません。"
+                return@launch
+            }
             if (_githubToken.value.isBlank()) {
                 _lastError.value = "GitHub token is missing. Please add it in settings."
                 return@launch
@@ -478,7 +525,8 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                         files = files,
                         chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Imported from GitHub", emptyList())),
                         activeSessionId = null,
-                        githubRepoName = repo
+                        githubRepoName = repo,
+                        allowGithubPush = true
                     )
                     storage.saveProject(project)
                     loadProjects()
@@ -493,6 +541,58 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                 val err = "Import error: ${e.message}"
                 _lastError.value = err
                 _errorEvents.emit(err)
+            } finally {
+                _isGenerating.value = false
+            }
+        }
+    }
+
+    fun cloneRepoToProject(context: Context, projectId: String, repoInput: String) {
+        viewModelScope.launch {
+            val project = _projects.value.find { it.id == projectId } ?: return@launch
+            _isGenerating.value = true
+            _lastError.value = null
+            try {
+                val clean = repoInput.trim().removeSuffix(".git")
+                val parts = when {
+                    clean.startsWith("https://github.com/") -> clean.removePrefix("https://github.com/")
+                    clean.startsWith("github.com/") -> clean.removePrefix("github.com/")
+                    else -> clean
+                }.split("/").filter { it.isNotBlank() }
+
+                if (parts.size < 2) {
+                    val err = "Invalid GitHub repository format. Use 'owner/repo' or 'https://github.com/owner/repo'."
+                    _lastError.value = err
+                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                    _isGenerating.value = false
+                    return@launch
+                }
+
+                val owner = parts[0]
+                val repo = parts[1]
+
+                val result = githubService.downloadRepositoryZip(_githubToken.value, owner, repo)
+                if (result.isSuccess) {
+                    val files = result.getOrNull()!!
+                    val updatedProject = project.copy(
+                        files = files,
+                        githubRepoName = repo,
+                        allowGithubPush = true
+                    )
+                    storage.saveProject(updatedProject)
+                    loadProjects()
+                    Toast.makeText(context, "Git clone completed! Files updated from GitHub.", Toast.LENGTH_LONG).show()
+                    _successEvents.emit(Unit)
+                } else {
+                    val err = "Git clone failed: ${result.exceptionOrNull()?.message}"
+                    _lastError.value = err
+                    Toast.makeText(context, err, Toast.LENGTH_LONG).show()
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                val err = "Git clone error: ${e.message}"
+                _lastError.value = err
+                Toast.makeText(context, err, Toast.LENGTH_LONG).show()
             } finally {
                 _isGenerating.value = false
             }
@@ -548,13 +648,31 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
                     return@launch
                 }
 
+                val repoName = name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)
+                var allowGithubPush = false
+                if (_githubToken.value.isNotBlank()) {
+                    val checkResult = githubService.checkRepositoryExists(_githubToken.value, repoName)
+                    val exists = checkResult.getOrDefault(false)
+                    if (exists) {
+                        allowGithubPush = false
+                        val warnMsg = "プロジェクト名が重複しているので、名前を変更するか、プロジェクト設定画面でgit pushを有効化しないとアップロードできません"
+                        _lastError.value = warnMsg
+                        _errorEvents.emit(warnMsg)
+                    } else {
+                        allowGithubPush = true
+                    }
+                } else {
+                    allowGithubPush = true
+                }
+
                 val project = PwaProject(
                     id = UUID.randomUUID().toString(),
                     name = name,
                     files = filesParsed,
                     chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt, filesParsed)), result.totalTokenCount)),
                     activeSessionId = null,
-                    selectedModel = _selectedModel.value
+                    selectedModel = _selectedModel.value,
+                    allowGithubPush = allowGithubPush
                 )
                 storage.saveProject(project)
                 loadProjects()
