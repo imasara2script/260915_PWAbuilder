@@ -8,6 +8,12 @@ import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import javax.crypto.Cipher
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
+import javax.crypto.spec.SecretKeySpec
+import java.security.SecureRandom
 
 data class PwaFile(val name: String, val content: String)
 data class ChatMessage(
@@ -33,7 +39,8 @@ data class PwaProject(
     val activeSessionId: String? = null,
     val selectedModel: String? = null,
     val githubRepoName: String? = null,
-    val allowGithubPush: Boolean = false
+    val allowGithubPush: Boolean = false,
+    val description: String? = null
 ) {
     val activeSession: ChatSession?
         get() = chatSessions.find { it.id == activeSessionId } ?: chatSessions.lastOrNull()
@@ -97,6 +104,7 @@ class PwaStorage(private val context: Context) {
             put("selectedModel", project.selectedModel)
             put("githubRepoName", project.githubRepoName ?: "")
             put("allowGithubPush", project.allowGithubPush)
+            put("description", project.description ?: "")
         }
         File(projectDir, ".metadata").writeText(metadata.toString())
         
@@ -165,6 +173,7 @@ class PwaStorage(private val context: Context) {
         var selectedModel: String? = null
         var githubRepoName: String? = null
         var allowGithubPush = false
+        var description: String? = null
         if (metadataFile.exists()) {
             try {
                 val json = JSONObject(metadataFile.readText())
@@ -173,6 +182,7 @@ class PwaStorage(private val context: Context) {
                 selectedModel = json.optString("selectedModel").takeIf { it.isNotEmpty() }
                 githubRepoName = json.optString("githubRepoName").takeIf { it.isNotEmpty() }
                 allowGithubPush = json.optBoolean("allowGithubPush", false)
+                description = json.optString("description").takeIf { it.isNotEmpty() }
             } catch (e: Exception) {
                 // Fallback for old format
                 val text = metadataFile.readText()
@@ -244,7 +254,7 @@ class PwaStorage(private val context: Context) {
                 PwaFile(file.name, file.readText())
             }
         } ?: emptyList()
-        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel, githubRepoName, allowGithubPush)
+        return PwaProject(id, name, files, chatSessions, activeSessionId, selectedModel, githubRepoName, allowGithubPush, description)
     }
 
     private fun isImageFile(name: String): Boolean {
@@ -337,5 +347,64 @@ Also, include a visible version number or update timestamp in the UI (e.g. in th
         val today = getTodayString()
         val key = "model_usage_${modelName}_$today"
         return prefs.getInt(key, 0)
+    }
+}
+
+object CryptoUtils {
+    private const val ALGORITHM = "AES/GCM/NoPadding"
+    private const val KEY_SIZE = 256
+    private const val IV_SIZE = 12
+    private const val TAG_SIZE = 128
+    private const val ITERATIONS = 10000
+
+    fun encryptApiKeys(password: String, timestamp: Long, geminiKey: String, githubToken: String): String {
+        val payloadJson = JSONObject().apply {
+            put("geminiApiKey", geminiKey)
+            put("githubToken", githubToken)
+        }.toString()
+
+        val salt = "PWA_BUILDER_SALT_$timestamp".toByteArray(Charsets.UTF_8)
+        val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+        val spec = PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_SIZE)
+        val secretKey = SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
+
+        val cipher = Cipher.getInstance(ALGORITHM)
+        val iv = ByteArray(IV_SIZE)
+        SecureRandom().nextBytes(iv)
+        val gcmSpec = GCMParameterSpec(TAG_SIZE, iv)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey, gcmSpec)
+
+        val encryptedBytes = cipher.doFinal(payloadJson.toByteArray(Charsets.UTF_8))
+        val combined = iv + encryptedBytes
+        return Base64.encodeToString(combined, Base64.DEFAULT)
+    }
+
+    fun decryptApiKeys(password: String, timestamp: Long, encryptedBase64: String): Pair<String, String>? {
+        return try {
+            val combined = Base64.decode(encryptedBase64, Base64.DEFAULT)
+            if (combined.size <= IV_SIZE) return null
+
+            val iv = combined.copyOfRange(0, IV_SIZE)
+            val encryptedBytes = combined.copyOfRange(IV_SIZE, combined.size)
+
+            val salt = "PWA_BUILDER_SALT_$timestamp".toByteArray(Charsets.UTF_8)
+            val factory = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256")
+            val spec = PBEKeySpec(password.toCharArray(), salt, ITERATIONS, KEY_SIZE)
+            val secretKey = SecretKeySpec(factory.generateSecret(spec).encoded, "AES")
+
+            val cipher = Cipher.getInstance(ALGORITHM)
+            val gcmSpec = GCMParameterSpec(TAG_SIZE, iv)
+            cipher.init(Cipher.DECRYPT_MODE, secretKey, gcmSpec)
+
+            val decryptedBytes = cipher.doFinal(encryptedBytes)
+            val jsonStr = String(decryptedBytes, Charsets.UTF_8)
+            val json = JSONObject(jsonStr)
+            val geminiKey = json.optString("geminiApiKey", "")
+            val ghToken = json.optString("githubToken", "")
+            Pair(geminiKey, ghToken)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
     }
 }

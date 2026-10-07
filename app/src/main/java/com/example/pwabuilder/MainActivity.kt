@@ -22,6 +22,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -55,7 +57,11 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Backup
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Settings
@@ -76,6 +82,8 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.navigation3.runtime.NavKey
@@ -91,6 +99,10 @@ import com.example.pwabuilder.data.PwaProject
 import com.example.pwabuilder.data.PwaStorage
 import com.example.pwabuilder.ui.PwaDestinations
 import com.example.pwabuilder.ui.PwaPreviewScreen
+import org.json.JSONObject
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 import com.example.pwabuilder.ui.PwaViewModel
 import com.example.pwabuilder.ui.theme.PWABuilderTheme
 import java.io.File
@@ -238,6 +250,13 @@ class MainActivity : ComponentActivity() {
                                     onBack = { backStack.removeLastOrNull() }
                                 )
                             }
+                            entry<PwaDestinations.Backup>(
+                                metadata = ListDetailSceneStrategy.detailPane()
+                            ) {
+                                BackupScreen(
+                                    onBack = { backStack.removeLastOrNull() }
+                                )
+                            }
                             entry<PwaDestinations.AiEditor>(
                                 metadata = ListDetailSceneStrategy.detailPane()
                             ) {
@@ -361,7 +380,7 @@ fun ProjectDashboardScreen(
     val projects by viewModel.projects.collectAsState()
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text("PWA Projects") },
@@ -449,7 +468,7 @@ fun ProjectSettingsScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text("Project Settings") },
@@ -483,6 +502,30 @@ fun ProjectSettingsScreen(
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Save Name")
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            var projectDescription by remember(project) { mutableStateOf(project.description ?: "") }
+
+            OutlinedTextField(
+                value = projectDescription,
+                onValueChange = { projectDescription = it },
+                label = { Text("Project Description / Context Prompt") },
+                placeholder = { Text("e.g. A task management PWA built with HTML/CSS/JS with local storage support") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+                supportingText = { Text("Used as context for AI when generating or refining this project") }
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Button(
+                onClick = { viewModel.updateProjectDescription(project.id, projectDescription) },
+                enabled = projectDescription != (project.description ?: ""),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Save Project Description Prompt")
             }
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -747,7 +790,7 @@ fun ImportProjectScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text("Import Project") },
@@ -978,7 +1021,7 @@ fun SettingsScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text("Global Settings") },
@@ -1107,12 +1150,28 @@ fun SettingsScreen(
                 textStyle = MaterialTheme.typography.bodySmall
             )
             Spacer(modifier = Modifier.height(8.dp))
-            Button(
-                onClick = { viewModel.updateGenerationPromptTemplate(editableTemplate) },
-                enabled = editableTemplate.isNotBlank() && editableTemplate != promptTemplate,
-                modifier = Modifier.fillMaxWidth()
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                Text("Save Prompt Template")
+                Button(
+                    onClick = { viewModel.updateGenerationPromptTemplate(editableTemplate) },
+                    enabled = editableTemplate.isNotBlank() && editableTemplate != promptTemplate,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Save Template")
+                }
+
+                OutlinedButton(
+                    onClick = {
+                        viewModel.resetGenerationPromptTemplateToDefault()
+                        editableTemplate = PwaStorage.DEFAULT_GENERATION_PROMPT_TEMPLATE
+                        Toast.makeText(context, "Prompt template reset to default", Toast.LENGTH_SHORT).show()
+                    },
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("デフォルトに戻す")
+                }
             }
 
             Spacer(modifier = Modifier.height(24.dp))
@@ -1159,6 +1218,16 @@ fun SettingsScreen(
             ) {
                 Text("Configure AI Models & RPD Limits")
             }
+
+            Spacer(modifier = Modifier.height(16.dp))
+            OutlinedButton(
+                onClick = { viewModel.navigateTo(PwaDestinations.Backup) },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Backup, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("バックアップと復元 (Backup & Restore)")
+            }
         }
     }
 }
@@ -1195,7 +1264,7 @@ fun AiEditorScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
         topBar = {
             TopAppBar(title = { Text("PWA Builder AI") })
         }
@@ -1222,6 +1291,7 @@ fun AiEditorScreen(
                 }
 
                 if (lastError != null) {
+                    val clipboardManager = LocalClipboardManager.current
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1238,6 +1308,12 @@ fun AiEditorScreen(
                                     color = MaterialTheme.colorScheme.onErrorContainer,
                                     modifier = Modifier.weight(1f)
                                 )
+                                TextButton(onClick = {
+                                    clipboardManager.setText(AnnotatedString(lastError!!))
+                                    Toast.makeText(context, "Error message copied to clipboard", Toast.LENGTH_SHORT).show()
+                                }) {
+                                    Text("Copy", color = MaterialTheme.colorScheme.onErrorContainer)
+                                }
                                 TextButton(onClick = { viewModel.clearError() }) {
                                     Text("Clear", color = MaterialTheme.colorScheme.onErrorContainer)
                                 }
@@ -1368,7 +1444,7 @@ fun ModelSettingsScreen(
     }
 
     Scaffold(
-        modifier = modifier.fillMaxSize(),
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
         topBar = {
             TopAppBar(
                 title = { Text("AI Model Settings (RPD)") },
@@ -1467,6 +1543,501 @@ fun ModelSettingsScreen(
                         )
                     }
                 }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun BackupScreen(
+    onBack: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val viewModel = LocalPwaViewModel.current
+
+    var includeSettings by remember { mutableStateOf(true) }
+    var includeProjects by remember { mutableStateOf(true) }
+    var includeApiKeys by remember { mutableStateOf(true) }
+
+    var exportPassword by remember { mutableStateOf("") }
+    var showExportPasswordDialog by remember { mutableStateOf(false) }
+
+    var importPassword by remember { mutableStateOf("") }
+    var showImportPasswordDialog by remember { mutableStateOf(false) }
+
+    val defaultFileName = remember {
+        val dateStr = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        "PWA builder $dateStr backup.json"
+    }
+
+    val createDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/json")
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val json = viewModel.createBackupJson(
+                    includeSettings = includeSettings,
+                    includeProjects = includeProjects,
+                    includeApiKeys = includeApiKeys,
+                    encryptionPassword = exportPassword.takeIf { it.isNotBlank() }
+                )
+                context.contentResolver.openOutputStream(uri)?.use { os ->
+                    os.write(json.toByteArray(Charsets.UTF_8))
+                }
+                Toast.makeText(context, "Backup file saved successfully!", Toast.LENGTH_LONG).show()
+                exportPassword = ""
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Failed to save backup: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    data class BackupProjectItem(val id: String, val name: String)
+
+    data class BackupPreviewInfo(
+        val timestampString: String,
+        val hasGlobalSettings: Boolean,
+        val projects: List<BackupProjectItem>,
+        val hasApiKeys: Boolean,
+        val rawJson: String
+    )
+
+    var pendingRestoreInfo by remember { mutableStateOf<BackupPreviewInfo?>(null) }
+    var restoreSettingsChoice by remember { mutableStateOf(true) }
+    var restoreApiKeysChoice by remember { mutableStateOf(true) }
+    var selectedProjectIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+
+    val openDocumentLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        if (uri != null) {
+            try {
+                val jsonString = context.contentResolver.openInputStream(uri)?.use { isStream ->
+                    isStream.readBytes().toString(Charsets.UTF_8)
+                }
+                if (!jsonString.isNullOrBlank()) {
+                    val root = JSONObject(jsonString)
+                    val timestamp = root.optLong("timestamp", 0L)
+                    val dateStr = if (timestamp > 0) {
+                        SimpleDateFormat("yyyy/MM/dd HH:mm:ss", Locale.getDefault()).format(Date(timestamp))
+                    } else {
+                        "Unknown date"
+                    }
+                    val hasSettings = root.has("globalSettings")
+                    val hasApiKeys = root.has("encryptedApiKeys") || root.has("apiKeys")
+
+                    val projectsList = mutableListOf<BackupProjectItem>()
+                    if (root.has("projects")) {
+                        val projectsArray = root.getJSONArray("projects")
+                        for (i in 0 until projectsArray.length()) {
+                            val pJson = projectsArray.getJSONObject(i)
+                            val id = pJson.optString("id", UUID.randomUUID().toString())
+                            val name = pJson.optString("name", "Untitled Project")
+                            projectsList.add(BackupProjectItem(id, name))
+                        }
+                    }
+
+                    restoreSettingsChoice = hasSettings
+                    restoreApiKeysChoice = hasApiKeys
+                    selectedProjectIds = projectsList.map { it.id }.toSet()
+
+                    pendingRestoreInfo = BackupPreviewInfo(
+                        timestampString = dateStr,
+                        hasGlobalSettings = hasSettings,
+                        projects = projectsList,
+                        hasApiKeys = hasApiKeys,
+                        rawJson = jsonString
+                    )
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(context, "Error opening backup file: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    if (showExportPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { showExportPasswordDialog = false },
+            title = { Text("APIキー暗号化パスワードの設定") },
+            text = {
+                Column {
+                    Text("APIキー（Gemini & GitHub）を安全に暗号化してバックアップ保存するためのパスワードを入力してください。", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = exportPassword,
+                        onValueChange = { exportPassword = it },
+                        label = { Text("暗号化パスワード") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        showExportPasswordDialog = false
+                        createDocumentLauncher.launch(defaultFileName)
+                    },
+                    enabled = exportPassword.isNotBlank()
+                ) {
+                    Text("暗号化して保存")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showExportPasswordDialog = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
+
+    if (showImportPasswordDialog) {
+        AlertDialog(
+            onDismissRequest = { showImportPasswordDialog = false },
+            title = { Text("APIキーの復号化パスワード") },
+            text = {
+                Column {
+                    Text("バックアップファイル内の暗号化されたAPIキーを復元するためのパスワードを入力してください。", style = MaterialTheme.typography.bodySmall)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = importPassword,
+                        onValueChange = { importPassword = it },
+                        label = { Text("暗号化パスワード") },
+                        visualTransformation = PasswordVisualTransformation(),
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        val info = pendingRestoreInfo
+                        if (info != null) {
+                            val result = viewModel.restoreBackupJsonSelective(
+                                context = context,
+                                jsonString = info.rawJson,
+                                restoreSettings = restoreSettingsChoice && info.hasGlobalSettings,
+                                restoreProjects = selectedProjectIds.isNotEmpty(),
+                                restoreApiKeys = true,
+                                selectedProjectIds = selectedProjectIds,
+                                encryptionPassword = importPassword
+                            )
+                            if (result.isSuccess) {
+                                showImportPasswordDialog = false
+                                pendingRestoreInfo = null
+                                importPassword = ""
+                                Toast.makeText(context, "選択した項目・APIキーを復元しました！", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "復元失敗: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    enabled = importPassword.isNotBlank()
+                ) {
+                    Text("復元実行")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showImportPasswordDialog = false }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
+
+    if (pendingRestoreInfo != null) {
+        val info = pendingRestoreInfo!!
+        val allProjectIds = remember(info.projects) { info.projects.map { it.id }.toSet() }
+        val isAllProjectsSelected = selectedProjectIds.containsAll(allProjectIds) && allProjectIds.isNotEmpty()
+
+        AlertDialog(
+            onDismissRequest = { pendingRestoreInfo = null },
+            title = { Text("バックアップ復元の確認 & プレビュー") },
+            text = {
+                Column(modifier = Modifier.heightIn(max = 400.dp).verticalScroll(rememberScrollState())) {
+                    Text("作成日時: ${info.timestampString}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.primary)
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("復元する項目を選択してください:", style = MaterialTheme.typography.bodyMedium)
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = info.hasGlobalSettings) { restoreSettingsChoice = !restoreSettingsChoice }
+                    ) {
+                        Checkbox(
+                            checked = restoreSettingsChoice && info.hasGlobalSettings,
+                            onCheckedChange = { restoreSettingsChoice = it },
+                            enabled = info.hasGlobalSettings
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "アプリのグローバル設定" + if (!info.hasGlobalSettings) " (なし)" else "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (info.hasGlobalSettings) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        )
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = info.hasApiKeys) { restoreApiKeysChoice = !restoreApiKeysChoice }
+                    ) {
+                        Checkbox(
+                            checked = restoreApiKeysChoice && info.hasApiKeys,
+                            onCheckedChange = { restoreApiKeysChoice = it },
+                            enabled = info.hasApiKeys
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "APIキー (Gemini & GitHub)" + if (!info.hasApiKeys) " (なし)" else "",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = if (info.hasApiKeys) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable(enabled = info.projects.isNotEmpty()) {
+                                selectedProjectIds = if (isAllProjectsSelected) emptySet() else allProjectIds
+                            }
+                    ) {
+                        Checkbox(
+                            checked = isAllProjectsSelected,
+                            onCheckedChange = {
+                                selectedProjectIds = if (it) allProjectIds else emptySet()
+                            },
+                            enabled = info.projects.isNotEmpty()
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "プロジェクト一覧 (${info.projects.size} 個)" + if (info.projects.isEmpty()) " (なし)" else "",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = if (info.projects.isNotEmpty()) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
+                        )
+                    }
+
+                    if (info.projects.isNotEmpty()) {
+                        Column(modifier = Modifier.padding(start = 24.dp)) {
+                            info.projects.forEach { item ->
+                                val isSelected = item.id in selectedProjectIds
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            selectedProjectIds = if (isSelected) {
+                                                selectedProjectIds - item.id
+                                            } else {
+                                                selectedProjectIds + item.id
+                                            }
+                                        }
+                                        .padding(vertical = 2.dp)
+                                ) {
+                                    Checkbox(
+                                        checked = isSelected,
+                                        onCheckedChange = {
+                                            selectedProjectIds = if (it) {
+                                                selectedProjectIds + item.id
+                                            } else {
+                                                selectedProjectIds - item.id
+                                            }
+                                        }
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text(
+                                        text = item.name,
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        if (restoreApiKeysChoice && info.hasApiKeys) {
+                            importPassword = ""
+                            showImportPasswordDialog = true
+                        } else {
+                            val result = viewModel.restoreBackupJsonSelective(
+                                context = context,
+                                jsonString = info.rawJson,
+                                restoreSettings = restoreSettingsChoice && info.hasGlobalSettings,
+                                restoreProjects = selectedProjectIds.isNotEmpty(),
+                                restoreApiKeys = false,
+                                selectedProjectIds = selectedProjectIds
+                            )
+                            pendingRestoreInfo = null
+                            if (result.isSuccess) {
+                                Toast.makeText(context, "選択した項目・プロジェクトを復元しました！", Toast.LENGTH_LONG).show()
+                            } else {
+                                Toast.makeText(context, "復元に失敗しました: ${result.exceptionOrNull()?.message}", Toast.LENGTH_LONG).show()
+                            }
+                        }
+                    },
+                    enabled = (restoreSettingsChoice && info.hasGlobalSettings) ||
+                              (restoreApiKeysChoice && info.hasApiKeys) ||
+                              selectedProjectIds.isNotEmpty()
+                ) {
+                    Text("選択した項目を復元")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { pendingRestoreInfo = null }) {
+                    Text("キャンセル")
+                }
+            }
+        )
+    }
+
+    Scaffold(
+        modifier = modifier.fillMaxSize().navigationBarsPadding().imePadding(),
+        topBar = {
+            TopAppBar(
+                title = { Text("Backup & Restore") },
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                    }
+                }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState())
+        ) {
+            Text("Data Backup (エクスポート)", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "バックアップデータに含める項目を選択して、JSONファイルとして保存します。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+            ) {
+                Column(modifier = Modifier.padding(12.dp)) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { includeSettings = !includeSettings }
+                    ) {
+                        Checkbox(
+                            checked = includeSettings,
+                            onCheckedChange = { includeSettings = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("アプリのグローバル設定", style = MaterialTheme.typography.bodyMedium)
+                            Text("モデル設定、プロンプトテンプレートなど", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { includeProjects = !includeProjects }
+                    ) {
+                        Checkbox(
+                            checked = includeProjects,
+                            onCheckedChange = { includeProjects = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("全プロジェクトファイル", style = MaterialTheme.typography.bodyMedium)
+                            Text("ソースコード、チャット対話履歴、スナップショットなど", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { includeApiKeys = !includeApiKeys }
+                    ) {
+                        Checkbox(
+                            checked = includeApiKeys,
+                            onCheckedChange = { includeApiKeys = it }
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text("APIキー", style = MaterialTheme.typography.bodyMedium)
+                            Text("Gemini API Key, GitHub PAT Token (暗号化保存)", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(16.dp))
+
+            Button(
+                onClick = {
+                    if (includeApiKeys) {
+                        exportPassword = ""
+                        showExportPasswordDialog = true
+                    } else {
+                        createDocumentLauncher.launch(defaultFileName)
+                    }
+                },
+                enabled = includeSettings || includeProjects || includeApiKeys,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("バックアップファイルを保存")
+            }
+
+            Spacer(modifier = Modifier.height(28.dp))
+            HorizontalDivider()
+            Spacer(modifier = Modifier.height(28.dp))
+
+            Text("Data Restore (インポート/復元)", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                "以前作成したバックアップファイル (.json) から、プロジェクトや設定情報を復元します。",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.height(12.dp))
+
+            OutlinedButton(
+                onClick = { openDocumentLauncher.launch("application/json") },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Icon(Icons.Default.UploadFile, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(8.dp))
+                Text("バックアップファイルから復元")
             }
         }
     }

@@ -32,6 +32,8 @@ import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -118,9 +120,9 @@ fun PwaPreviewScreen(
     var showMenu by remember { mutableStateOf(false) }
     var showJsonViewer by remember { mutableStateOf(false) }
     var showUpdateSheet by remember { mutableStateOf(false) }
-    val sheetState = rememberModalBottomSheetState()
-    val jsonSheetState = rememberModalBottomSheetState()
-    val updateSheetState = rememberModalBottomSheetState()
+    val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val jsonSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+    val updateSheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val scope = rememberCoroutineScope()
     val clipboardManager = LocalClipboardManager.current
 
@@ -324,6 +326,12 @@ fun PwaPreviewScreen(
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onErrorContainer
                             )
+                        }
+                        TextButton(onClick = {
+                            clipboardManager.setText(AnnotatedString(previewError!!))
+                            Toast.makeText(context, "Error message copied", Toast.LENGTH_SHORT).show()
+                        }) {
+                            Text("Copy", color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                         TextButton(onClick = { previewError = null }) {
                             Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
@@ -664,6 +672,12 @@ fun ChatInterface(
                         color = MaterialTheme.colorScheme.onErrorContainer,
                         modifier = Modifier.weight(1f)
                     )
+                    TextButton(onClick = {
+                        clipboardManager.setText(AnnotatedString(chatError!!))
+                        Toast.makeText(context, "Error message copied", Toast.LENGTH_SHORT).show()
+                    }) {
+                        Text("Copy", color = MaterialTheme.colorScheme.onErrorContainer)
+                    }
                     TextButton(onClick = { viewModel.clearChatError() }) {
                         Text("Dismiss", color = MaterialTheme.colorScheme.onErrorContainer)
                     }
@@ -897,11 +911,32 @@ fun ChatInterface(
                                             Date(msg.timestamp)
                                         )
                                     }
-                                    Text(
-                                        text = timeString,
-                                        style = MaterialTheme.typography.labelSmall,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
-                                    )
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text(
+                                            text = timeString,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                                            modifier = Modifier.weight(1f)
+                                        )
+                                        TextButton(
+                                            onClick = {
+                                                clipboardManager.setText(AnnotatedString(msg.content))
+                                                Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
+                                            },
+                                            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 0.dp)
+                                        ) {
+                                            Icon(
+                                                Icons.Rounded.ContentCopy,
+                                                contentDescription = "Copy message",
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("Copy", style = MaterialTheme.typography.labelSmall)
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.height(2.dp))
                                     Text(
                                         text = msg.content,
@@ -996,6 +1031,11 @@ fun ChatInterface(
         Spacer(modifier = Modifier.height(8.dp))
 
         Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .navigationBarsPadding()
+                .imePadding()
+                .padding(horizontal = 4.dp, vertical = 4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { imagePickerLauncher.launch("image/*") }) {

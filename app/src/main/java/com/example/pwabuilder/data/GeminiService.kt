@@ -112,10 +112,14 @@ class GeminiService {
             "${it.role}: ${it.content}"
         }
 
+        val descriptionContext = project.description?.takeIf { it.isNotBlank() }?.let {
+            "Project Description / Context:\n$it\n\n"
+        } ?: ""
+
         val fullPrompt = """
             You are an expert web developer. Refine the existing PWA based on the following instructions.
             
-            Existing Files:
+            ${descriptionContext}Existing Files:
             $filesContext
             
             Previous Conversation:

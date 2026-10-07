@@ -16,6 +16,7 @@ import com.example.pwabuilder.MainActivity
 import com.example.pwabuilder.R
 import com.example.pwabuilder.data.ChatMessage
 import com.example.pwabuilder.data.ChatSession
+import com.example.pwabuilder.data.CryptoUtils
 import com.example.pwabuilder.data.GeminiService
 import com.example.pwabuilder.data.GitHubService
 import com.example.pwabuilder.data.PwaFile
@@ -93,6 +94,12 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
     fun updateGenerationPromptTemplate(template: String) {
         _generationPromptTemplate.value = template
         storage.saveGenerationPromptTemplate(template)
+    }
+
+    fun resetGenerationPromptTemplateToDefault() {
+        val defaultTemplate = PwaStorage.DEFAULT_GENERATION_PROMPT_TEMPLATE
+        _generationPromptTemplate.value = defaultTemplate
+        storage.saveGenerationPromptTemplate(defaultTemplate)
     }
 
     private val _modelRpdVersion = MutableStateFlow(0)
@@ -205,6 +212,13 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
     fun updateProjectAllowGithubPush(projectId: String, allowed: Boolean) {
         val project = _projects.value.find { it.id == projectId } ?: return
         val updatedProject = project.copy(allowGithubPush = allowed)
+        storage.saveProject(updatedProject)
+        loadProjects()
+    }
+
+    fun updateProjectDescription(projectId: String, description: String) {
+        val project = _projects.value.find { it.id == projectId } ?: return
+        val updatedProject = project.copy(description = description)
         storage.saveProject(updatedProject)
         loadProjects()
     }
@@ -628,63 +642,84 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
         viewModelScope.launch {
             _isGenerating.value = true
             _lastError.value = null
+
+            val repoName = name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)
+            var allowGithubPush = false
+            if (_githubToken.value.isNotBlank()) {
+                val checkResult = githubService.checkRepositoryExists(_githubToken.value, repoName)
+                val exists = checkResult.getOrDefault(false)
+                if (exists) {
+                    allowGithubPush = false
+                    val warnMsg = "プロジェクト名が重複しているので、名前を変更するか、プロジェクト設定画面でgit pushを有効化しないとアップロードできません"
+                    _lastError.value = warnMsg
+                    _errorEvents.emit(warnMsg)
+                } else {
+                    allowGithubPush = true
+                }
+            } else {
+                allowGithubPush = true
+            }
+
+            var filesParsed = emptyList<PwaFile>()
+            var tokenCount = 0
+            var errorMessage: String? = null
+
             try {
                 val files = imagePaths.map { File(it) }.filter { it.exists() }
                 storage.incrementModelUsage(_selectedModel.value)
                 val result = geminiService.generatePwa(_apiKey.value, _selectedModel.value, prompt, files, _generationPromptTemplate.value)
+                tokenCount = result.totalTokenCount
                 val response = result.text
                 if (response.isBlank()) {
-                    val errorMsg = "Empty response from AI. Please check your prompt and API key."
-                    _lastError.value = errorMsg
-                    _errorEvents.emit(errorMsg)
-                    return@launch
-                }
-                
-                val filesParsed = geminiService.parsePwaResponse(response)
-                if (filesParsed.isEmpty()) {
-                    val errorMsg = "Could not parse PWA files from response. Response text: \n$response"
-                    _lastError.value = errorMsg
-                    _errorEvents.emit("Could not parse PWA files from response")
-                    return@launch
-                }
-
-                val repoName = name.lowercase().replace(Regex("[^a-z0-9]"), "-").take(100)
-                var allowGithubPush = false
-                if (_githubToken.value.isNotBlank()) {
-                    val checkResult = githubService.checkRepositoryExists(_githubToken.value, repoName)
-                    val exists = checkResult.getOrDefault(false)
-                    if (exists) {
-                        allowGithubPush = false
-                        val warnMsg = "プロジェクト名が重複しているので、名前を変更するか、プロジェクト設定画面でgit pushを有効化しないとアップロードできません"
-                        _lastError.value = warnMsg
-                        _errorEvents.emit(warnMsg)
-                    } else {
-                        allowGithubPush = true
-                    }
+                    errorMessage = "Empty response from AI. Please check your prompt and API key."
                 } else {
-                    allowGithubPush = true
+                    filesParsed = geminiService.parsePwaResponse(response)
+                    if (filesParsed.isEmpty()) {
+                        errorMessage = "Could not parse PWA files from response."
+                    }
                 }
-
-                val project = PwaProject(
-                    id = UUID.randomUUID().toString(),
-                    name = name,
-                    files = filesParsed,
-                    chatSessions = listOf(ChatSession(UUID.randomUUID().toString(), "Initial Generation", listOf(ChatMessage("user", prompt, filesParsed)), result.totalTokenCount)),
-                    activeSessionId = null,
-                    selectedModel = _selectedModel.value,
-                    allowGithubPush = allowGithubPush
-                )
-                storage.saveProject(project)
-                loadProjects()
-                _successEvents.emit(Unit)
             } catch (e: Exception) {
                 e.printStackTrace()
-                val errorMsg = "Generation failed: ${e.javaClass.simpleName}: ${e.message}\n\nCause: ${e.cause?.message ?: "Unknown"}"
-                _lastError.value = errorMsg
-                _errorEvents.emit("Error: ${e.message}")
-            } finally {
-                _isGenerating.value = false
+                errorMessage = "Generation failed: ${e.message}"
             }
+
+            val userMsg = ChatMessage("user", prompt, filesParsed.ifEmpty { null })
+            val chatMessages = mutableListOf(userMsg)
+            if (errorMessage != null) {
+                chatMessages.add(ChatMessage("assistant", "⚠️ Error: $errorMessage", null, System.currentTimeMillis()))
+                _lastError.value = errorMessage
+                _errorEvents.emit(errorMessage)
+            }
+
+            val defaultFiles = filesParsed.ifEmpty {
+                listOf(
+                    PwaFile("index.html", "<!DOCTYPE html>\n<html>\n<head><title>$name</title></head>\n<body>\n<h1>$name</h1>\n<p>Generation incomplete. Please retry from chat.</p>\n</body>\n</html>")
+                )
+            }
+
+            val session = ChatSession(
+                id = UUID.randomUUID().toString(),
+                title = "Initial Generation",
+                messages = chatMessages,
+                lastTokenCount = tokenCount,
+                errorMessage = errorMessage
+            )
+
+            val project = PwaProject(
+                id = UUID.randomUUID().toString(),
+                name = name,
+                files = defaultFiles,
+                chatSessions = listOf(session),
+                activeSessionId = session.id,
+                selectedModel = _selectedModel.value,
+                allowGithubPush = allowGithubPush,
+                description = prompt
+            )
+
+            storage.saveProject(project)
+            loadProjects()
+            _isGenerating.value = false
+            _successEvents.emit(Unit)
         }
     }
 
@@ -1013,5 +1048,249 @@ class PwaViewModel(private val storage: PwaStorage) : ViewModel() {
             storage.saveProject(updatedProject)
             loadProjects()
         }
+    }
+
+    fun createBackupJson(
+        includeSettings: Boolean,
+        includeProjects: Boolean,
+        includeApiKeys: Boolean,
+        encryptionPassword: String? = null
+    ): String {
+        val root = JSONObject()
+        val timestamp = System.currentTimeMillis()
+        root.put("backupVersion", 1)
+        root.put("timestamp", timestamp)
+
+        if (includeSettings) {
+            val settings = JSONObject().apply {
+                put("selectedModel", _selectedModel.value)
+                put("generationPromptTemplate", _generationPromptTemplate.value)
+                put("masterPassword", getMasterPassword())
+            }
+            root.put("globalSettings", settings)
+        }
+
+        if (includeApiKeys && !encryptionPassword.isNullOrBlank()) {
+            val encryptedBase64 = CryptoUtils.encryptApiKeys(
+                password = encryptionPassword,
+                timestamp = timestamp,
+                geminiKey = _apiKey.value,
+                githubToken = _githubToken.value
+            )
+            root.put("encryptedApiKeys", encryptedBase64)
+        }
+
+        if (includeProjects) {
+            val projectsArray = JSONArray()
+            _projects.value.forEach { proj ->
+                val projJson = JSONObject().apply {
+                    put("id", proj.id)
+                    put("name", proj.name)
+                    put("selectedModel", proj.selectedModel)
+                    put("githubRepoName", proj.githubRepoName ?: "")
+                    put("allowGithubPush", proj.allowGithubPush)
+                    put("description", proj.description ?: "")
+                    put("activeSessionId", proj.activeSessionId ?: "")
+
+                    val filesArray = JSONArray()
+                    proj.files.forEach { f ->
+                        filesArray.put(JSONObject().apply {
+                            put("name", f.name)
+                            put("content", f.content)
+                        })
+                    }
+                    put("files", filesArray)
+
+                    val sessionsArray = JSONArray()
+                    proj.chatSessions.forEach { session ->
+                        val sessionJson = JSONObject().apply {
+                            put("id", session.id)
+                            put("title", session.title)
+                            put("lastTokenCount", session.lastTokenCount)
+                            put("selectedModel", session.selectedModel)
+                            put("errorMessage", session.errorMessage ?: "")
+
+                            val msgArray = JSONArray()
+                            session.messages.forEach { msg ->
+                                msgArray.put(JSONObject().apply {
+                                    put("role", msg.role)
+                                    put("content", msg.content)
+                                    put("timestamp", msg.timestamp)
+                                    msg.snapshot?.let { snap ->
+                                        val snapArray = JSONArray()
+                                        snap.forEach { sf ->
+                                            snapArray.put(JSONObject().apply {
+                                                put("name", sf.name)
+                                                put("content", sf.content)
+                                            })
+                                        }
+                                        put("snapshot", snapArray)
+                                    }
+                                })
+                            }
+                            put("messages", msgArray)
+                        }
+                        sessionsArray.put(sessionJson)
+                    }
+                    put("chatSessions", sessionsArray)
+                }
+                projectsArray.put(projJson)
+            }
+            root.put("projects", projectsArray)
+        }
+
+        return root.toString(2)
+    }
+
+    fun restoreBackupJsonSelective(
+        context: Context,
+        jsonString: String,
+        restoreSettings: Boolean,
+        restoreProjects: Boolean,
+        restoreApiKeys: Boolean,
+        selectedProjectIds: Set<String> = emptySet(),
+        encryptionPassword: String? = null
+    ): Result<Unit> {
+        return try {
+            val root = JSONObject(jsonString)
+            val timestamp = root.optLong("timestamp", System.currentTimeMillis())
+
+            if (restoreSettings && root.has("globalSettings")) {
+                val settings = root.getJSONObject("globalSettings")
+                val model = settings.optString("selectedModel").takeIf { it.isNotEmpty() }
+                if (model != null) {
+                    updateSelectedModel(model)
+                }
+                val template = settings.optString("generationPromptTemplate").takeIf { it.isNotEmpty() }
+                if (template != null) {
+                    updateGenerationPromptTemplate(template)
+                }
+                val masterPassword = settings.optString("masterPassword").takeIf { it.isNotEmpty() }
+                if (masterPassword != null) {
+                    saveMasterPassword(masterPassword)
+                }
+            }
+
+            if (restoreApiKeys) {
+                if (root.has("encryptedApiKeys")) {
+                    if (encryptionPassword.isNullOrBlank()) {
+                        return Result.failure(Exception("APIキーを復元するためのパスワードが必要です。"))
+                    }
+                    val encryptedBase64 = root.getString("encryptedApiKeys")
+                    val keys = CryptoUtils.decryptApiKeys(encryptionPassword, timestamp, encryptedBase64)
+                    if (keys == null) {
+                        return Result.failure(Exception("パスワードが正しくないか、データが破損しています。"))
+                    }
+                    if (keys.first.isNotEmpty()) updateApiKey(keys.first)
+                    if (keys.second.isNotEmpty()) updateGithubToken(keys.second)
+                } else if (root.has("apiKeys")) {
+                    val keys = root.getJSONObject("apiKeys")
+                    val geminiKey = keys.optString("geminiApiKey")
+                    if (geminiKey.isNotEmpty()) updateApiKey(geminiKey)
+                    val ghToken = keys.optString("githubToken")
+                    if (ghToken.isNotEmpty()) updateGithubToken(ghToken)
+                }
+            }
+
+            if (restoreProjects && root.has("projects")) {
+                val projectsArray = root.getJSONArray("projects")
+                for (i in 0 until projectsArray.length()) {
+                    val pJson = projectsArray.getJSONObject(i)
+                    val id = pJson.optString("id", UUID.randomUUID().toString())
+                    if (selectedProjectIds.isNotEmpty() && id !in selectedProjectIds) {
+                        continue
+                    }
+                    val name = pJson.optString("name", "Restored Project")
+                    val selectedModel = pJson.optString("selectedModel").takeIf { it.isNotEmpty() }
+                    val githubRepoName = pJson.optString("githubRepoName").takeIf { it.isNotEmpty() }
+                    val allowGithubPush = pJson.optBoolean("allowGithubPush", false)
+                    val description = pJson.optString("description").takeIf { it.isNotEmpty() }
+                    val activeSessionId = pJson.optString("activeSessionId").takeIf { it.isNotEmpty() }
+
+                    val filesList = mutableListOf<PwaFile>()
+                    if (pJson.has("files")) {
+                        val filesArray = pJson.getJSONArray("files")
+                        for (j in 0 until filesArray.length()) {
+                            val fJson = filesArray.getJSONObject(j)
+                            filesList.add(PwaFile(fJson.getString("name"), fJson.getString("content")))
+                        }
+                    }
+
+                    val sessionsList = mutableListOf<ChatSession>()
+                    if (pJson.has("chatSessions")) {
+                        val sessionsArray = pJson.getJSONArray("chatSessions")
+                        for (j in 0 until sessionsArray.length()) {
+                            val sJson = sessionsArray.getJSONObject(j)
+                            val msgsList = mutableListOf<ChatMessage>()
+                            if (sJson.has("messages")) {
+                                val msgsArray = sJson.getJSONArray("messages")
+                                for (k in 0 until msgsArray.length()) {
+                                    val mJson = msgsArray.getJSONObject(k)
+                                    val snapList = if (mJson.has("snapshot")) {
+                                        val snapArray = mJson.getJSONArray("snapshot")
+                                        val list = mutableListOf<PwaFile>()
+                                        for (l in 0 until snapArray.length()) {
+                                            val sfJson = snapArray.getJSONObject(l)
+                                            list.add(PwaFile(sfJson.getString("name"), sfJson.getString("content")))
+                                        }
+                                        list
+                                    } else null
+
+                                    msgsList.add(
+                                        ChatMessage(
+                                            role = mJson.getString("role"),
+                                            content = mJson.getString("content"),
+                                            snapshot = snapList,
+                                            timestamp = mJson.optLong("timestamp", System.currentTimeMillis())
+                                        )
+                                    )
+                                }
+                            }
+
+                            sessionsList.add(
+                                ChatSession(
+                                    id = sJson.getString("id"),
+                                    title = sJson.getString("title"),
+                                    messages = msgsList,
+                                    lastTokenCount = sJson.optInt("lastTokenCount", 0),
+                                    selectedModel = sJson.optString("selectedModel").takeIf { it.isNotEmpty() },
+                                    errorMessage = sJson.optString("errorMessage").takeIf { it.isNotEmpty() }
+                                )
+                            )
+                        }
+                    }
+
+                    val proj = PwaProject(
+                        id = id,
+                        name = name,
+                        files = filesList,
+                        chatSessions = sessionsList,
+                        activeSessionId = activeSessionId,
+                        selectedModel = selectedModel,
+                        githubRepoName = githubRepoName,
+                        allowGithubPush = allowGithubPush,
+                        description = description
+                    )
+
+                    storage.saveProject(proj)
+                }
+                loadProjects()
+            }
+
+            Result.success(Unit)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            Result.failure(e)
+        }
+    }
+
+    fun restoreBackupJson(context: Context, jsonString: String): Result<Unit> {
+        return restoreBackupJsonSelective(
+            context = context,
+            jsonString = jsonString,
+            restoreSettings = true,
+            restoreProjects = true,
+            restoreApiKeys = true
+        )
     }
 }
